@@ -1,5 +1,5 @@
-dist
-
-/node_modules
-.env
-.coverage
+# Style-capture input location (Epic 1) — Hilary's prior examples.
+# NEVER tracked, NEVER committed. Distil abstracted rules into the style
+# skill; the verbatim source here must never reach history. Deleted once
+# the style skill is ratified.
+.style-input/
