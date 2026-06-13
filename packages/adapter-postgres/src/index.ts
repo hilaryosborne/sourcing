@@ -1,0 +1,6 @@
+// Public API barrel for @hilaryosborne/adapter-postgres — a fridge.
+// Intentionally empty: Epic 2 scaffolds boundaries only. The Postgres storage
+// adapter implements the persistence-layer interface drafted and ratified in
+// Epic 4 (PLAN.md, DRAFT-AND-HALT.md); no adapter is built against an
+// unratified interface.
+export {};

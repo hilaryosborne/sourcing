@@ -1,0 +1,34 @@
+{
+  "name": "@hilaryosborne/core",
+  "version": "0.0.0",
+  "description": "The bowl — event definitions, aggregates, projections, and strippers. Zero storage concepts.",
+  "license": "MIT",
+  "author": "Hilary Osborne",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "nanoid": "^3.3.7",
+    "zod": "^4.0.0"
+  }
+}

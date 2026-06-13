@@ -1,8 +1,15 @@
-# TOOLING.md — proposed conventions (Epic 1, DRAFT — awaiting ratification)
+# TOOLING.md — conventions (Epic 1, RATIFIED 2026-06-13)
 
-Proposals for the scaffold's tooling. Each carries a recommendation and rationale.
-Decisions tagged **[RULE NEEDED]** are genuinely yours; the rest default to your
-prior repo unless you redline them. Nothing here is acted on until ratified.
+**Ratified by Hilary.** Every `[RULE NEEDED]` below was ruled in favour of the recommendation.
+This is now the governing tooling record for the Epic 2 scaffold; the scaffold obeys it.
+
+Ratified rulings (2026-06-13):
+- **Package manager:** pnpm workspaces.
+- **Build + module output:** tsup → dual ESM + CJS + `.d.ts`.
+- **Test runner:** Vitest.
+- **Lint:** ESLint + typescript-eslint (skill-encoding ruleset, bans `console` in `src`).
+- **Release/versioning:** Changesets (independent per-package).
+- **`@/` alias:** dropped — relative intra-package, package-name inter-package imports.
 
 Grounding: read from the deleted prior scaffold (`252e832`) + the style-input examples.
 Prior stack = TS strict / CommonJS / `@/` alias · Prettier 120·2·double-quote · Jest+ts-jest ·

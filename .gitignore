@@ -3,3 +3,17 @@
 # skill; the verbatim source here must never reach history. Deleted once
 # the style skill is ratified.
 .style-input/
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Test / coverage
+coverage/
+
+# Logs and OS cruft
+*.log
+.DS_Store

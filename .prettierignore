@@ -1,0 +1,12 @@
+dist
+coverage
+pnpm-lock.yaml
+
+# Governing documents and skills are authored prose, not code — Prettier does
+# not reflow them. (CLAUDE.md, the model, the plan, the protocol, the skills.)
+CLAUDE.md
+FOUNDATION.md
+PLAN.md
+DRAFT-AND-HALT.md
+TOOLING.md
+.claude/
