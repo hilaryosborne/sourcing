@@ -76,7 +76,8 @@ commitlint+commitizen+husky (conventional commits) · semantic-release → GitHu
 ## Naming conventions (carried from the coding-style skill, restated for scaffold)
 
 - Files: dotted, lowercase, single-word segments, `.v1` on versioned artefacts.
-- Packages: `@hilaryosborne/<name>` — `core`, `persistence`, `adapter-postgres`, …
+- Packages: the core is `@hilaryosborne/sourcing`; optional packages are
+  `@hilaryosborne/sourcing-<name>` — `sourcing-persistence`, `sourcing-adapter-postgres`, …
 - DSL primitives lowercase one word; exported definitions PascalCase+`V1`; locals camelCase.
 
 ---

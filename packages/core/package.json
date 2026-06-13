@@ -1,5 +1,5 @@
 {
-  "name": "@hilaryosborne/core",
+  "name": "@hilaryosborne/sourcing",
   "version": "0.0.0",
   "description": "The bowl — event definitions, aggregates, projections, and strippers. Zero storage concepts.",
   "license": "MIT",

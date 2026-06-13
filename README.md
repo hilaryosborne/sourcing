@@ -21,13 +21,13 @@ See **FOUNDATION.md** for the full conceptual model — it is the architecture.
 
 ## Packages
 
-| Package                           | Role                                                  |        |
-| --------------------------------- | ----------------------------------------------------- | ------ |
-| `@hilaryosborne/core`             | the bowl — events, aggregates, projections, strippers | Epic 3 |
-| `@hilaryosborne/persistence`      | the cook — registry, projection store, self-healing   | Epic 4 |
-| `@hilaryosborne/adapter-postgres` | a fridge — Postgres                                   | Epic 4 |
-| `@hilaryosborne/adapter-mongo`    | a fridge — Mongo                                      | Epic 4 |
-| `@hilaryosborne/adapter-s3`       | a fridge — S3 (the brutal one)                        | Epic 4 |
+| Package                                    | Role                                                  |        |
+| ------------------------------------------ | ----------------------------------------------------- | ------ |
+| `@hilaryosborne/sourcing`                  | the bowl — events, aggregates, projections, strippers | Epic 3 |
+| `@hilaryosborne/sourcing-persistence`      | the cook — registry, projection store, self-healing   | Epic 4 |
+| `@hilaryosborne/sourcing-adapter-postgres` | a fridge — Postgres                                   | Epic 4 |
+| `@hilaryosborne/sourcing-adapter-mongo`    | a fridge — Mongo                                      | Epic 4 |
+| `@hilaryosborne/sourcing-adapter-s3`       | a fridge — S3 (the brutal one)                        | Epic 4 |
 
 Core depends on nothing but Zod and nanoid. Persistence depends on core; core
 never depends on it. Adapters implement the persistence storage interface.

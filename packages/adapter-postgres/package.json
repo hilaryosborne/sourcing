@@ -1,5 +1,5 @@
 {
-  "name": "@hilaryosborne/adapter-postgres",
+  "name": "@hilaryosborne/sourcing-adapter-postgres",
   "version": "0.0.0",
   "description": "A fridge — Postgres implementation of the persistence-layer storage interface.",
   "license": "MIT",
@@ -28,7 +28,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@hilaryosborne/core": "workspace:*",
-    "@hilaryosborne/persistence": "workspace:*"
+    "@hilaryosborne/sourcing": "workspace:*",
+    "@hilaryosborne/sourcing-persistence": "workspace:*"
   }
 }

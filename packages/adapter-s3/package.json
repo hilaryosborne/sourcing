@@ -1,5 +1,5 @@
 {
-  "name": "@hilaryosborne/adapter-s3",
+  "name": "@hilaryosborne/sourcing-adapter-s3",
   "version": "0.0.0",
   "description": "A fridge — S3 object-store implementation of the persistence-layer storage interface (the brutal one).",
   "license": "MIT",
@@ -28,7 +28,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@hilaryosborne/core": "workspace:*",
-    "@hilaryosborne/persistence": "workspace:*"
+    "@hilaryosborne/sourcing": "workspace:*",
+    "@hilaryosborne/sourcing-persistence": "workspace:*"
   }
 }

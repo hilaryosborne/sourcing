@@ -1,5 +1,5 @@
 {
-  "name": "@hilaryosborne/persistence",
+  "name": "@hilaryosborne/sourcing-persistence",
   "version": "0.0.0",
   "description": "The cook — aggregate registry, projection store, and the self-healing algorithm. Composes core with storage.",
   "license": "MIT",
@@ -28,6 +28,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@hilaryosborne/core": "workspace:*"
+    "@hilaryosborne/sourcing": "workspace:*"
   }
 }

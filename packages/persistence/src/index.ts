@@ -1,4 +1,4 @@
-// Public API barrel for @hilaryosborne/persistence — the cook.
+// Public API barrel for @hilaryosborne/sourcing-persistence — the cook.
 // Intentionally empty: Epic 2 scaffolds boundaries only. The aggregate
 // registry, projection store, storage interface, and self-healing algorithm
 // are drafted, HALTed, and ratified in Epic 4 (PLAN.md, DRAFT-AND-HALT.md)

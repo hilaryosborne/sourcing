@@ -53,28 +53,28 @@ importers:
 
   packages/adapter-mongo:
     dependencies:
-      '@hilaryosborne/core':
+      '@hilaryosborne/sourcing':
         specifier: workspace:*
         version: link:../core
-      '@hilaryosborne/persistence':
+      '@hilaryosborne/sourcing-persistence':
         specifier: workspace:*
         version: link:../persistence
 
   packages/adapter-postgres:
     dependencies:
-      '@hilaryosborne/core':
+      '@hilaryosborne/sourcing':
         specifier: workspace:*
         version: link:../core
-      '@hilaryosborne/persistence':
+      '@hilaryosborne/sourcing-persistence':
         specifier: workspace:*
         version: link:../persistence
 
   packages/adapter-s3:
     dependencies:
-      '@hilaryosborne/core':
+      '@hilaryosborne/sourcing':
         specifier: workspace:*
         version: link:../core
-      '@hilaryosborne/persistence':
+      '@hilaryosborne/sourcing-persistence':
         specifier: workspace:*
         version: link:../persistence
 
@@ -89,7 +89,7 @@ importers:
 
   packages/persistence:
     dependencies:
-      '@hilaryosborne/core':
+      '@hilaryosborne/sourcing':
         specifier: workspace:*
         version: link:../core
 
