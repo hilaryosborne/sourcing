@@ -164,6 +164,15 @@ That is why concurrency, overwrite, and projection-cleanup are expressed as **ad
 
 **Known boundary — forget completion is an operational obligation.** Forget is **not atomic** across its steps (read → strip → overwrite → bin projections). It is **idempotent and convergent under retry**: re-running from the top heals any partial-failure state (strip of a redacted payload is identity-preserving; overwrite of redacted-over-redacted is a no-op in effect; bin deletes whatever is cached). The PII guarantee is therefore **contingent on completion.** A forget that fails *after* overwrite but *before* bin must be retried until bin succeeds — otherwise PII may persist in a cached projection (the stream head does not move under in-place redaction, so a stale projection can read as "current"). For an operation whose purpose is right-to-forget compliance, **completion is an operational obligation, not best-effort.**
 
+### S3 adapter — structural properties of the single-file layout
+
+The reference S3 adapter stores each aggregate as **one object** (`aggregates/{name}/{id}.json`) holding the whole event stream. These four properties follow from that choice and are recorded so they are understood on paper, not discovered under load:
+
+1. **Single-file for atomic reads.** The layout exists for *correctness*, not simplicity: a reader GETs the entire stream in one shot, so there is no window where a list races an in-flight commit and observes a half-written stream. That seam existed under a per-commit layout; single-file closes it. The cost below is paid deliberately for this.
+2. **Unbounded object growth.** Every commit rewrites the whole object, so read and write cost grow with stream length **without bound.** This is the accepted price of atomic reads on the slow adapter; bounding it (snapshotting / segmenting) would reintroduce a read seam and is out of scope. On S3, append **reads the full object before writing it**, because etag-CAS requires the current etag; the read is load-bearing for concurrency, **not an optimization that can be skipped.** (It reads as removable and is not.)
+3. **No cheap delta on S3.** There is no sub-object read on S3, so a STALE delta-fold reads the **whole** object — the same cost as a NO-STORED full build. **STALE provides no cost saving on the S3 adapter, by design.** This is a structural property, not a deferred optimization (relational/document adapters *can* read a delta cheaply; S3 cannot).
+4. **Concurrent forget — resolved by etag-CAS.** Two concurrent forgets both condition their write on the object's etag; the second is **rejected, not silently lost** — it retries against the new etag, re-reads the partially-redacted object, strips its own positions, and writes. Convergent under retry — this is the §"forget completion" property, now *guaranteed* by the single-file etag-CAS rather than left open.
+
 ---
 
 ## What is explicitly OUT of scope for core

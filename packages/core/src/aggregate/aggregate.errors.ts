@@ -1,7 +1,9 @@
 // Mechanical-only error codes for the aggregate layer. The aggregate enforces NO
 // business rules (FOUNDATION §Aggregates) — every code here is a structural fault,
 // never a judgement about whether an event "should" exist.
-export const enum AggregateErrors {
+// A regular `enum` (not `const enum`): consumers switch on these codes across a package
+// boundary, which a const enum cannot support under verbatimModuleSyntax. Same codes/values.
+export enum AggregateErrors {
   // Two event definitions registered for the same topic on ONE aggregate definition.
   // Topic uniqueness is local to the definition that registers it (FOUNDATION §Events).
   TOPIC_DUPLICATE = "AGGREGATE_TOPIC_DUPLICATE",

@@ -1,7 +1,7 @@
 {
   "name": "@hilaryosborne/sourcing-adapter-s3",
   "version": "0.0.0",
-  "description": "A fridge — S3 object-store implementation of the persistence-layer storage interface (the brutal one).",
+  "description": "S3 object-store implementation of the persistence-layer storage interface (the brutal one).",
   "license": "MIT",
   "author": "Hilary Osborne",
   "type": "module",

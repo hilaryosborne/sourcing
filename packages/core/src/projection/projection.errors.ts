@@ -1,7 +1,9 @@
 // Mechanical-only error codes for the projection layer. "The only errors a projection
 // raises are mechanical — a malformed mapper, a validation failure on the produced
 // model" (FOUNDATION §Projections).
-export const enum ProjectionErrors {
+// A regular `enum` (not `const enum`): consumers switch on these codes across a package
+// boundary, which a const enum cannot support under verbatimModuleSyntax. Same codes/values.
+export enum ProjectionErrors {
   // Two mappers registered for the same topic within one projection — a collision
   // within a single scope (FOUNDATION §Events, topic uniqueness is local).
   TOPIC_DUPLICATE = "PROJECTION_TOPIC_DUPLICATE",

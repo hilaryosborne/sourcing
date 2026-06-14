@@ -2,7 +2,10 @@
 // Tagged codes a consumer can switch on, thrown as `new Error(StorageErrors.X)` — never
 // business judgement (interface-adapters §"Errors"). One const enum per module, matching
 // core's EventErrors/AggregateErrors convention. Awaiting per-artefact ratification.
-export const enum StorageErrors {
+// A regular `enum` (not `const enum`): these codes are switched on by ADAPTERS in other
+// packages, and a const enum cannot be consumed across a package boundary under
+// verbatimModuleSyntax. Same codes, same values — just runtime-accessible.
+export enum StorageErrors {
   // Optimistic concurrency: append() was given an expectedHead that no longer matches the
   // stream's actual head — two processes staged onto separately-loaded copies of the same
   // aggregate and both reached commit (FOUNDATION §Events: "reconciling that collision is
@@ -15,4 +18,10 @@ export const enum StorageErrors {
   // only redact an event that actually exists. The match key is (stream, position) — within
   // one adapter, position is the unambiguous address of a fact.
   OVERWRITE_UNKNOWN_POSITION = "STORAGE_OVERWRITE_UNKNOWN_POSITION",
+
+  // append() was given staged events whose first position is not `expectedHead + 1` — a
+  // mis-sequenced (non-contiguous) append. A CALLER bug, NOT a concurrency loss (distinct
+  // from VERSION_CONFLICT). This precondition is load-bearing on a single-file adapter (S3),
+  // where the object key no longer encodes position and nothing else checks contiguity.
+  APPEND_NOT_CONTIGUOUS = "STORAGE_APPEND_NOT_CONTIGUOUS",
 }

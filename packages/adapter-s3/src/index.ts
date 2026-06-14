@@ -1,6 +1,7 @@
-// Public API barrel for @hilaryosborne/sourcing-adapter-s3 — a storage adapter (the brutal one).
-// Intentionally empty: Epic 2 scaffolds boundaries only. The S3 storage adapter
-// implements the persistence-layer interface drafted and ratified in Epic 4
-// (PLAN.md, DRAFT-AND-HALT.md). S3 is the forcing function: if the interface
-// can be honestly implemented here, it works anywhere.
-export {};
+// DRAFT — Epic 4, Phase C. Public API barrel for @hilaryosborne/sourcing-adapter-s3 — the
+// S3 object-store implementation of StorageI (the brutal adapter; FOUNDATION §"Storage
+// adapter scope"). The S3 client is INJECTED via S3ClientPort, so the concrete AWS/MinIO
+// wiring is a Phase D detail. Awaiting per-artefact ratification of the concurrency-emulation
+// and overwrite-by-position shapes before the conformance suite locks the contract.
+export { s3Storage } from "./s3-storage";
+export type { S3ClientPort } from "./s3-client";

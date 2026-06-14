@@ -2,7 +2,9 @@
 // switch on — never business judgement (coding-style "Errors", FOUNDATION "the only
 // errors the core raises are mechanical"). Thrown as `new Error(EventErrors.X)`, with
 // the underlying ZodError preserved on `.cause` where a schema parse failed.
-export const enum EventErrors {
+// A regular `enum` (not `const enum`): consumers switch on these codes across a package
+// boundary, which a const enum cannot support under verbatimModuleSyntax. Same codes/values.
+export enum EventErrors {
   // A payload failed its definition's schema on create().
   PAYLOAD_INVALID = "EVENT_PAYLOAD_INVALID",
 
