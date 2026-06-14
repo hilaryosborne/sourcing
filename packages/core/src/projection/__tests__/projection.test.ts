@@ -1,78 +1,69 @@
+// Projection layer: handler registration guards, the full fold, the resume-from-state
+// fold (the self-healing stale path), unmapped-topic tolerance, and the first-event-seeds-
+// the-shape contract surfacing as a validation error.
 import { describe, it, expect } from "vitest";
-import { object, string, number } from "zod";
 import projection from "../projection";
 import { ProjectionErrors } from "../projection.errors";
-import { FileAggregate, FileProjection, FileCreateV1, FileRenameV1, creator } from "../../__tests__/fixtures";
+import {
+  FileAggregate,
+  FileModelV1,
+  FileView,
+  FileCreateV1,
+  FileRenameV1,
+  FolderCreateV1,
+} from "../../__tests__/fixtures";
 
-// An aggregate with a create then a rename staged — the standard fold input.
-const stagedFile = () => {
+const withCreateAndRename = () => {
   const file = FileAggregate.instance("file-1");
-  file.add(FileCreateV1).by(creator).message({ name: "draft.txt", owner: "Alice" });
-  file.add(FileRenameV1).by(creator).message({ name: "final.txt" });
+  file.events.add(FileCreateV1.create({ name: "draft.txt", owner: "Alice" }).creator("user", "u1"));
+  file.events.add(FileRenameV1.create({ name: "final.txt" }).creator("user", "u1"));
   return file;
 };
 
-describe("projection builder", () => {
-  it("should fold events into the read-model (Scenario 1, on demand)", () => {
-    const model = FileProjection.build(stagedFile().get.events());
-    expect(model).toEqual({ name: "final.txt", owner: "Alice", events: 2 });
+describe("projection", () => {
+  it("handle() rejects a structurally malformed mapper", () => {
+    const view = projection("projection.bad-mapper.v1", FileModelV1);
+    // @ts-expect-error — a non-function mapper is a mechanical fault
+    expect(() => view.handle(FileCreateV1, null)).toThrow(ProjectionErrors.MAPPER_INVALID);
   });
 
-  it("should apply staged events on top of committed ones (Scenario 3 overlay)", () => {
-    const file = stagedFile();
-    file.commit(); // create + rename now committed
-    file.add(FileRenameV1).by(creator).message({ name: "renamed-again.txt" });
-    const model = FileProjection.build(file.get.events());
-    expect(model).toEqual({ name: "renamed-again.txt", owner: "Alice", events: 3 });
+  it("handle() rejects an event not registered on the bound aggregate", () => {
+    const view = projection("projection.unreg.v1", FileModelV1).aggregate(FileAggregate);
+    expect(() => view.handle(FolderCreateV1, (c) => c)).toThrow(ProjectionErrors.EVENT_UNREGISTERED);
   });
 
-  it("should tolerate an unmapped topic by leaving state unchanged", () => {
-    const createOnly = projection({
-      schema: object({ name: string(), events: number() }),
-      initial: { name: "", events: 0 },
-      handlers: [
-        { topic: "file.create.v1", apply: (current) => ({ ...current, name: "seen", events: current.events + 1 }) },
-      ],
-    });
-    // The rename event has no handler here — it must be folded over without throwing.
-    const model = createOnly.build(stagedFile().get.events());
-    expect(model).toEqual({ name: "seen", events: 1 });
+  it("handle() rejects a duplicate topic within one projection", () => {
+    const view = projection("projection.dup.v1", FileModelV1);
+    view.handle(FileCreateV1, (c, e) => ({ ...c, name: e.payload.name, owner: e.payload.owner }));
+    expect(() => view.handle(FileCreateV1, (c) => c)).toThrow(ProjectionErrors.TOPIC_DUPLICATE);
   });
 
-  it("should be deterministic — the same events rebuild the identical read-model", () => {
-    const events = stagedFile().get.events();
-    expect(FileProjection.build(events)).toEqual(FileProjection.build(events));
+  it("build() folds the full stream and validates the model", () => {
+    expect(FileView.build(withCreateAndRename())).toEqual({ name: "final.txt", owner: "Alice" });
   });
 
-  it("should reject a duplicate mapper topic with TOPIC_DUPLICATE", () => {
-    expect(() =>
-      projection({
-        schema: object({ n: number() }),
-        initial: { n: 0 },
-        handlers: [
-          { topic: "file.create.v1", apply: (c) => c },
-          { topic: "file.create.v1", apply: (c) => c },
-        ],
-      }),
-    ).toThrow(ProjectionErrors.TOPIC_DUPLICATE);
+  it("build(aggregate, from) RESUMES: folds the delta over a supplied prior state", () => {
+    // The self-healing stale path: only the delta is in the aggregate, the stored state is
+    // the seed. The rename updates `name`; `owner` survives from the seed alone.
+    const delta = FileAggregate.instance("file-1");
+    delta.events.add(FileRenameV1.create({ name: "v3.txt" }).creator("user", "u1"));
+    expect(FileView.build(delta, { name: "final.txt", owner: "Alice" })).toEqual({ name: "v3.txt", owner: "Alice" });
   });
 
-  it("should reject a malformed mapper with MAPPER_INVALID", () => {
-    expect(() =>
-      projection({
-        schema: object({ n: number() }),
-        initial: { n: 0 },
-        handlers: [{ topic: "file.create.v1" } as never],
-      }),
-    ).toThrow(ProjectionErrors.MAPPER_INVALID);
+  it("build() tolerates an unmapped topic — it folds the rest", () => {
+    const view = projection("projection.partial.v1", FileModelV1).aggregate(FileAggregate);
+    view.handle(FileCreateV1, (c, e) => ({ ...c, name: e.payload.name, owner: e.payload.owner }));
+    // FileRenameV1 is unmapped here → ignored, the created state stands.
+    expect(view.build(withCreateAndRename())).toEqual({ name: "draft.txt", owner: "Alice" });
   });
 
-  it("should reject a produced read-model that fails the output schema with OUTPUT_INVALID", () => {
-    const broken = projection({
-      schema: object({ events: number() }),
-      initial: { events: 0 },
-      handlers: [{ topic: "file.create.v1", apply: () => ({ events: "not-a-number" }) as never }],
-    });
-    expect(() => broken.build(stagedFile().get.events())).toThrow(ProjectionErrors.OUTPUT_INVALID);
+  it("build() fails validation when the first folded event doesn't establish the shape", () => {
+    // The sharp edge of the State-not-Partial contract: a projection whose only handler is
+    // a non-creating event produces an incomplete model → OUTPUT_INVALID, by design.
+    const view = projection("projection.shapeless.v1", FileModelV1).aggregate(FileAggregate);
+    view.handle(FileRenameV1, (c, e) => ({ ...c, name: e.payload.name }));
+    const file = FileAggregate.instance("file-1");
+    file.events.add(FileRenameV1.create({ name: "x.txt" }).creator("user", "u1"));
+    expect(() => view.build(file)).toThrow(ProjectionErrors.OUTPUT_INVALID);
   });
 });

@@ -10,6 +10,10 @@ export const enum ProjectionErrors {
   // build, not just the first.
   OUTPUT_INVALID = "PROJECTION_OUTPUT_INVALID",
 
-  // A mapper is structurally malformed (e.g. missing topic or apply).
+  // A mapper is structurally malformed (e.g. missing event definition or function).
   MAPPER_INVALID = "PROJECTION_MAPPER_INVALID",
+
+  // handle() given an event not registered on the bound aggregate. A projection can only
+  // map events its aggregate declares legal (checked when an aggregate is bound).
+  EVENT_UNREGISTERED = "PROJECTION_EVENT_UNREGISTERED",
 }

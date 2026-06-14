@@ -1,8 +1,9 @@
-// The `event()` definition factory — the primary public primitive of the event
-// layer. An event definition owns a topic, the payload schema (the only thing that
-// "deeply understands its own payload"), and a registry of named strippers. It mints
-// instances via create() and rehydrates them via restore(). Lowercase single-word
-// factory (coding-style naming).
+// The `event()` definition factory — the primary public primitive of the event layer
+// (contract C, ratified). A definition owns a topic, the payload schema (the only thing
+// that "deeply understands its own payload"), and a registry of named strippers. It mints
+// STANDALONE instances via create() and rehydrates committed ones via restore(). Events
+// are not bound to any aggregate — the same definition may be registered on many
+// (FOUNDATION §Events: topic uniqueness is per-aggregate, never global).
 import type { ZodType } from "zod";
 import type { EventInstance } from "./event.instance";
 import type { EventEnvelopeV1Type } from "./event.schema";
@@ -10,25 +11,25 @@ import { eventInstance, eventInstanceFromEnvelope } from "./event.instance";
 import { EventErrors } from "./event.errors";
 
 // A stripper is a PURE redaction: payload in, redacted payload out. Registered by a
-// context name ("gdpr", "export-redaction", …) so erasure can be contextual. Same
-// shape in and out — it redacts fields, it does not change the payload's type.
+// context name ("gdpr", "export-redaction", …) so erasure can be contextual. Same shape
+// in and out — it redacts fields, it does not change the payload's type.
 export type Stripper<P = unknown> = (payload: P) => P;
 
-// The event definition: the outer factory return. `strip()` registers a named
-// stripper and chains; `create()` mints a new fact; `restore()` rehydrates an old one.
+// The event definition: the outer factory return.
 export interface EventDefinition<P = unknown> {
   topic: string;
   schema: ZodType<P>;
   // Register a contextual stripper. Re-using a name on one definition is a collision
   // within a single scope → EventErrors.STRIPPER_DUPLICATE.
   strip: (context: string, stripper: Stripper<P>) => EventDefinition<P>;
-  // Validate `payload` against `schema`, assign id + created eagerly, return an
-  // unstaged instance. Staging (position/aggregate/creator) happens on the aggregate.
+  // Build a STANDALONE event: validate `payload` against `schema`, assign id + created
+  // eagerly, and return an unstaged instance ready for `.creator()` / `.headers()` and
+  // `aggregate.events.add()`. The instance carries no position/aggregate until added.
   create: (payload: P) => EventInstance<P>;
   // The symmetric partner to create(): rehydrate an EventInstance from a complete,
   // already-persisted envelope WITHOUT minting new identity — it keeps the stored
   // id/position/creator/headers/created and re-validates the payload. This is what
-  // AggregateInstance.import() uses so committed history stays strippable/exportable.
+  // aggregate.events.import() uses so committed history stays strippable/exportable.
   restore: (envelope: EventEnvelopeV1Type) => EventInstance<P>;
 }
 

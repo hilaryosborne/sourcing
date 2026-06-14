@@ -129,11 +129,14 @@ typed, and binding `aggregate()` lets it reject an event the aggregate doesn't k
 projection's **name** is its identity in the projection store (Scenario 2).
 
 > **Contract — the first folded event establishes the shape.** There is no separate
-> `initial` seed in the definition. Your _creating_ event (here, `AccountOpenedV1`) must
-> establish the model's base shape, and every handler defensively spreads `...current`. A
-> projection whose first folded event does not produce a schema-valid base **will fail
-> validation** — this is intended, not a bug. The starting state for a _resumed_ build (the
-> stale path in Scenario 2) is supplied at build time, not baked into the definition.
+> `initial` seed in the definition. The handler signature **promises a complete `current`**
+> (it is typed as the full model, not `Partial`) — you keep that promise by seeding the full
+> shape in your _creating_ event (here, `AccountOpenedV1`); every handler then defensively
+> spreads `...current`. Break the promise — a first folded event that doesn't establish the
+> shape — and you get a **runtime validation error the types won't catch**. That sharp edge
+> is the price of the ergonomic default (no `current.balance | undefined` friction
+> everywhere). The starting state for a _resumed_ build is the optional second argument to
+> `build(aggregate, from?)` (the stale path in Scenario 2), not baked into the definition.
 
 ---
 
@@ -147,7 +150,7 @@ account.events.add(AccountOpenedV1.create({ holder: "Ada" }).creator("user", "ad
 account.events.add(AccountDepositedV1.create({ amount: 100 }).creator("user", "ada"));
 account.events.commit(); // in-memory: fold staged → committed (no persistence — core has none)
 
-const state = Balance.create().build(account); // ‹draft› build shape — see Design status
+const state = Balance.build(account);
 // → { holder: "Ada", balance: 100 }
 ```
 
@@ -169,7 +172,7 @@ account.events.import(history); // loaded history → committed, balance = 100
 
 account.events.add(AccountWithdrawnV1.create({ amount: 250 }).creator("user", "ada")); // staged, NOT committed
 
-const wouldBe = Balance.create().build(account); // folds committed ++ staged   ‹draft›
+const wouldBe = Balance.build(account); // folds committed ++ staged
 
 if (wouldBe.balance < 0) {
   // Business rule violated. Reject. Never commit. The staged event evaporates.
@@ -251,7 +254,7 @@ discard or commit:
 ```ts
 const account = await repo.load(Account, id);
 account.events.add(AccountWithdrawnV1.create({ amount: 250 }).creator("user", "ada"));
-const wouldBe = Balance.create().build(account); // ‹draft›
+const wouldBe = Balance.build(account);
 // judge wouldBe.balance; commit via repo.commit(account) only if your rules pass
 ```
 
@@ -312,13 +315,14 @@ whichever object holds the event).
 - `event(topic, schema)` definition factory + `.strip(context, fn)`
 - `nanoid` re-exported from core for consumer convenience (minting payload uids)
 
-**Ratified this round — README shape approved; the `.ts` interface stubs still go through
-the per-artefact Epic 3 gate (this round ratified the shapes, not the stubbed files):**
+**Ratified and built (Epic 3 core — implemented, tested, and proven):**
 
 - **A. Aggregate construction.** `aggregate(name)` + `.register(eventDef)` per event.
 - **B. Projection construction + handlers.** `projection(name, model)` + `.aggregate(def)` +
   `.handle(eventDef, (current, event) => next)`. Typed `event.payload`; the name is the
-  projection's identity in the projection store.
+  projection's identity in the projection store. **Build is the single call
+  `build(aggregate, from?)`** — fold the aggregate over an optional resume seed; the
+  two-step `create(seed).build()` was dropped as ceremony.
 - **C. Standalone events + fluent builder.** `EventDef.create(payload).creator(entity, uid).headers(h)`,
   added via `account.events.add(builder)`. Events aren't bound to one aggregate; `creator`
   still required (no default).
@@ -333,17 +337,14 @@ the per-artefact Epic 3 gate (this round ratified the shapes, not the stubbed fi
 - **`repo.forget(...)` is a first-class repository method** — the repository owns the
   load → strip → overwrite → rebuild mechanism; the app owns the decision.
 
-**Still `‹draft›` — open, to be ratified later:**
+**Still `‹draft›` — open, to be ratified later (all Epic 4 / storage-session):**
 
-1. **Projection build shape.** Examples use `Balance.create(seed?).build(aggregate)`.
-   Alternatives on the table: `build(aggregate, from?)`, or `factory(aggregate).base(seed).build()`.
-   Final shape comes back through the Epic 3 gate.
-2. **`repository({ storage })` auto-wiring.** Deriving the registry + projection store from
+1. **`repository({ storage })` auto-wiring.** Deriving the registry + projection store from
    one adapter (consumer wires only `storage`). Good idea; ratify with the storage session.
-3. **Event uid as the overwrite key.** Envelope already carries an intrinsic `id` (nanoid).
+2. **Event uid as the overwrite key.** Envelope already carries an intrinsic `id` (nanoid).
    `id` vs `(stream, position)` as the `overwrite` match key — **deferred to the dedicated
    storage-interface session** (ties to spread storage).
-4. **Optimistic concurrency.** Whether an expected-head guard on `commit` is part of the
+3. **Optimistic concurrency.** Whether an expected-head guard on `commit` is part of the
    **shared** storage port or an **optional** capability — **deferred to the dedicated
    storage-interface session** (spread storage may have no single authoritative head).
 

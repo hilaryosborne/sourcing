@@ -1,92 +1,90 @@
+// Aggregate layer: register/topic uniqueness, id minting, the add() staging guards, the
+// committed/staged split, import/restore, commit, export, and position.
 import { describe, it, expect } from "vitest";
-import { object } from "zod";
-import event from "../../event/event";
 import aggregate from "../aggregate";
 import { AggregateErrors } from "../aggregate.errors";
-import type { EventEnvelopeV1Type } from "../../event/event.schema";
-import { FileAggregate, FileCreateV1, FileRenameV1, creator } from "../../__tests__/fixtures";
+import {
+  FileAggregate,
+  FileCreateV1,
+  FileRenameV1,
+  FolderCreateV1,
+  committedEnvelopes,
+} from "../../__tests__/fixtures";
 
-// A complete committed envelope for import tests.
-const committedCreate = (position: number, owner = "Alice"): EventEnvelopeV1Type => ({
-  id: `id-${position}`,
-  topic: "file.create.v1",
-  position,
-  aggregate: { id: "file-1", name: "file" },
-  creator: { entity: "user", uid: "importer" },
-  headers: {},
-  created: "2020-01-01T00:00:00.000Z",
-  payload: { name: "stored.txt", owner },
-});
-
-describe("aggregate definition", () => {
-  it("should reject duplicate topics on one definition with TOPIC_DUPLICATE", () => {
-    expect(() => aggregate("file", [FileCreateV1, FileCreateV1])).toThrow(AggregateErrors.TOPIC_DUPLICATE);
+describe("aggregate", () => {
+  it("register() rejects a duplicate topic on one definition", () => {
+    const def = aggregate("dup.v1");
+    def.register(FileCreateV1);
+    expect(() => def.register(FileCreateV1)).toThrow(AggregateErrors.TOPIC_DUPLICATE);
   });
 
-  it("should reject staging an event it does not register with TOPIC_UNKNOWN", () => {
-    const unregistered = event("other.v1", object({}));
-    const file = FileAggregate.instance("file-1");
-    expect(() => file.add(unregistered)).toThrow(AggregateErrors.TOPIC_UNKNOWN);
-  });
-});
-
-describe("aggregate instance — committed/staged split", () => {
-  it("should require a creator before message() with MISSING_CREATOR", () => {
-    const file = FileAggregate.instance("file-1");
-    expect(() => file.add(FileCreateV1).message({ name: "a", owner: "Alice" })).toThrow(
-      AggregateErrors.MISSING_CREATOR,
-    );
+  it("instance() mints a nanoid when no id is given, and accepts an explicit id", () => {
+    expect(FileAggregate.instance().id).toMatch(/.+/);
+    expect(FileAggregate.instance("file-1").id).toBe("file-1");
+    expect(FileAggregate.instance().id).not.toBe(FileAggregate.instance().id);
   });
 
-  it("should stage events with 0-based provisional positions, keeping committed empty", () => {
+  it("events.add() rejects an unregistered topic", () => {
     const file = FileAggregate.instance("file-1");
-    file.add(FileCreateV1).by(creator).message({ name: "draft", owner: "Alice" });
-    file.add(FileRenameV1).by(creator).message({ name: "final" });
-    expect(file.get.committed()).toHaveLength(0);
-    expect(file.get.staged()).toHaveLength(2);
-    expect(file.get.staged().map((event) => event.get.position())).toEqual([0, 1]);
-    expect(file.get.position()).toBe(1);
+    const alien = FolderCreateV1.create({ name: "docs" }).creator("user", "u1");
+    expect(() => file.events.add(alien)).toThrow(AggregateErrors.TOPIC_UNKNOWN);
   });
 
-  it("should continue provisional positions from the imported committed head", () => {
+  it("events.add() rejects an event with no creator (provenance required)", () => {
     const file = FileAggregate.instance("file-1");
-    file.import([committedCreate(0), committedCreate(1)]);
-    file.add(FileRenameV1).by(creator).message({ name: "final" });
-    expect(file.get.committed()).toHaveLength(2);
-    expect(file.get.staged()[0]?.get.position()).toBe(2);
+    const noCreator = FileCreateV1.create({ name: "draft.txt", owner: "Alice" });
+    expect(() => file.events.add(noCreator)).toThrow(AggregateErrors.MISSING_CREATOR);
   });
 
-  it("should fold staged into committed on commit()", () => {
+  it("events.add() stages onto `staged`, stamps position + reference, returns the instance", () => {
     const file = FileAggregate.instance("file-1");
-    file.add(FileCreateV1).by(creator).message({ name: "draft", owner: "Alice" });
-    file.commit();
-    expect(file.get.staged()).toHaveLength(0);
-    expect(file.get.committed()).toHaveLength(1);
+    const staged = file.events.add(FileCreateV1.create({ name: "draft.txt", owner: "Alice" }).creator("user", "u1"));
+    expect(staged.get.position()).toBe(0);
+    expect(staged.get.aggregate()).toEqual({ id: "file-1", name: "file.v1" });
+    expect(file.events.committed).toHaveLength(0);
+    expect(file.events.staged).toHaveLength(1);
+    file.events.add(FileRenameV1.create({ name: "final.txt" }).creator("user", "u1"));
+    expect(file.events.staged.map((e) => e.get.position())).toEqual([0, 1]);
+    expect(file.position).toBe(1);
   });
 
-  it("should reject importing an unregistered topic with TOPIC_UNKNOWN", () => {
+  it("commit() folds staged into committed", () => {
     const file = FileAggregate.instance("file-1");
-    const alien = { ...committedCreate(0), topic: "alien.v1" };
-    expect(() => file.import([alien])).toThrow(AggregateErrors.TOPIC_UNKNOWN);
+    file.events.add(FileCreateV1.create({ name: "draft.txt", owner: "Alice" }).creator("user", "u1"));
+    file.events.commit();
+    expect(file.events.staged).toHaveLength(0);
+    expect(file.events.committed).toHaveLength(1);
   });
 
-  it("should reject importing a malformed envelope with EVENT_INVALID", () => {
+  it("import() rehydrates committed history; the next staged position continues the stream", () => {
     const file = FileAggregate.instance("file-1");
-    const broken = { ...committedCreate(0), payload: { name: "no owner" } } as EventEnvelopeV1Type;
-    expect(() => file.import([broken])).toThrow(AggregateErrors.EVENT_INVALID);
+    file.events.import(committedEnvelopes("file-1")); // positions 0,1
+    expect(file.events.committed).toHaveLength(2);
+    file.events.add(FileRenameV1.create({ name: "renamed.txt" }).creator("user", "u1"));
+    expect(file.events.staged[0]?.get.position()).toBe(2);
   });
 
-  it("should export committed and staged events as validated envelopes", () => {
+  it("import() rejects an unregistered topic", () => {
     const file = FileAggregate.instance("file-1");
-    file.add(FileCreateV1).by(creator).message({ name: "draft", owner: "Alice" });
-    const exported = file.export();
+    const alien = FolderCreateV1.create({ name: "docs" }).creator("user", "u1").stage({ id: "x", name: "folder" }, 0);
+    expect(() => file.events.import([alien.build()])).toThrow(AggregateErrors.TOPIC_UNKNOWN);
+  });
+
+  it("import() rejects a malformed envelope", () => {
+    const file = FileAggregate.instance("file-1");
+    const broken = { ...committedEnvelopes("file-1")[0]!, payload: { name: "", owner: "" } };
+    expect(() => file.events.import([broken])).toThrow(AggregateErrors.EVENT_INVALID);
+  });
+
+  it("export() yields committed ++ staged as envelopes", () => {
+    const file = FileAggregate.instance("file-1");
+    file.events.add(FileCreateV1.create({ name: "draft.txt", owner: "Alice" }).creator("user", "u1"));
+    const exported = file.events.export();
     expect(exported).toHaveLength(1);
-    expect(exported[0]).toMatchObject({
-      topic: "file.create.v1",
-      position: 0,
-      aggregate: { id: "file-1", name: "file" },
-      creator: { entity: "user", uid: "tester" },
-      payload: { name: "draft", owner: "Alice" },
-    });
+    expect(exported[0]).toMatchObject({ topic: "file.create.v1", position: 0 });
+  });
+
+  it("position is undefined for an empty aggregate", () => {
+    expect(FileAggregate.instance("file-1").position).toBeUndefined();
   });
 });

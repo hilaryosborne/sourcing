@@ -6,12 +6,12 @@ export const enum AggregateErrors {
   // Topic uniqueness is local to the definition that registers it (FOUNDATION §Events).
   TOPIC_DUPLICATE = "AGGREGATE_TOPIC_DUPLICATE",
 
-  // add() given an event definition whose topic is not registered on this aggregate.
+  // events.add() given an event whose topic is not registered on this aggregate.
   // A container can only hold the events declared legal on its definition.
   TOPIC_UNKNOWN = "AGGREGATE_TOPIC_UNKNOWN",
 
-  // message() reached without a creator. Provenance is required at staging and has
-  // no default — a missing creator fails loudly (FOUNDATION §Events).
+  // events.add() reached with an event that carries no creator. Provenance is required at
+  // staging and has no default — a missing creator fails loudly (FOUNDATION §Events).
   MISSING_CREATOR = "AGGREGATE_MISSING_CREATOR",
 
   // import() given an event that fails the envelope schema. Loading durable history

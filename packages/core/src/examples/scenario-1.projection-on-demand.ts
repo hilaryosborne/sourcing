@@ -1,64 +1,40 @@
-// Worked example — Scenario 1: projections on demand (FOUNDATION.md). The purest use
-// of the library: events live only in memory, the projection is folded out of them on
-// the spot, nothing is stored. No persistence package, no repository, no storage adapter — just the
-// aggregate and a pure builder. This file is built entirely from the public API.
-import { event, aggregate, projection } from "../index";
+// Scenario 1 — Projections on demand (FOUNDATION §Scenario 1). The purest use of the
+// library: define events, an aggregate, and a projection; fill the aggregate in memory;
+// fold a read-model. No persistence package, no storage — just core. This file is a
+// runnable worked example; its test asserts the end-to-end result.
 import { object, string, number } from "zod";
-import type { z } from "zod";
+import event from "../event/event";
+import aggregate from "../aggregate/aggregate";
+import projection from "../projection/projection";
 
-// 1. Define atomic events — one fact each (style §2). The payload schema lives with
-//    the event; the topic, the symbol, and (in a real tree) the filename agree.
-const AccountOpenedV1 = event("account.opened.v1", object({ holder: string().min(1) }));
-const MoneyDepositedV1 = event("account.deposited.v1", object({ amount: number().int().positive() }));
-const MoneyWithdrawnV1 = event("account.withdrawn.v1", object({ amount: number().int().positive() }));
+// --- Domain: a bank account (deposits add, withdrawals subtract) ---
+export const AccountOpenedV1 = event("account.opened.v1", object({ holder: string().min(1) }));
+export const AccountDepositedV1 = event("account.deposited.v1", object({ amount: number().int().positive() }));
+export const AccountWithdrawnV1 = event("account.withdrawn.v1", object({ amount: number().int().positive() }));
 
-// 2. Declare the aggregate — the events legal on it.
-const AccountAggregate = aggregate("account", [AccountOpenedV1, MoneyDepositedV1, MoneyWithdrawnV1]);
+export const Account = aggregate("account.v1");
+Account.register(AccountOpenedV1);
+Account.register(AccountDepositedV1);
+Account.register(AccountWithdrawnV1);
 
-// 3. Declare the read-model and the pure reducers that fold events into it.
-const AccountBalanceV1 = object({ holder: string(), balance: number().int(), entries: number().int().min(0) });
-type AccountBalanceV1Type = z.infer<typeof AccountBalanceV1>;
+export const BalanceV1 = object({ holder: string(), balance: number() });
+export const Balance = projection("projection.balance.v1", BalanceV1);
+Balance.aggregate(Account);
+Balance.handle(AccountOpenedV1, (current, event) => ({ ...current, holder: event.payload.holder, balance: 0 }));
+Balance.handle(AccountDepositedV1, (current, event) => ({
+  ...current,
+  balance: current.balance + event.payload.amount,
+}));
+Balance.handle(AccountWithdrawnV1, (current, event) => ({
+  ...current,
+  balance: current.balance - event.payload.amount,
+}));
 
-const AccountBalanceProjection = projection({
-  schema: AccountBalanceV1,
-  initial: { holder: "", balance: 0, entries: 0 },
-  handlers: [
-    {
-      topic: "account.opened.v1",
-      apply: (current, event) => ({
-        ...current,
-        holder: (event.payload as { holder: string }).holder,
-        entries: current.entries + 1,
-      }),
-    },
-    {
-      topic: "account.deposited.v1",
-      apply: (current, event) => ({
-        ...current,
-        balance: current.balance + (event.payload as { amount: number }).amount,
-        entries: current.entries + 1,
-      }),
-    },
-    {
-      topic: "account.withdrawn.v1",
-      apply: (current, event) => ({
-        ...current,
-        balance: current.balance - (event.payload as { amount: number }).amount,
-        entries: current.entries + 1,
-      }),
-    },
-  ],
-});
-
-const creator = { entity: "user", uid: "demo" } as const;
-
-// The story, top to bottom: open an aggregate, stage facts (each validated as it lands),
-// then fold the would-be state on demand. The consumer — not the library — decides
-// what the numbers mean (e.g. whether a withdrawal overdraws). Mechanism, not judgment.
-export const run = (): AccountBalanceV1Type => {
-  const account = AccountAggregate.instance("acct-001");
-  account.add(AccountOpenedV1).by(creator).message({ holder: "Ada" });
-  account.add(MoneyDepositedV1).by(creator).message({ amount: 100 });
-  account.add(MoneyWithdrawnV1).by(creator).message({ amount: 30 });
-  return AccountBalanceProjection.build(account.get.events());
+// Open an account, deposit, withdraw — then project the balance, all in memory.
+export const projectBalance = () => {
+  const account = Account.instance(); // core mints the id
+  account.events.add(AccountOpenedV1.create({ holder: "Ada" }).creator("user", "ada"));
+  account.events.add(AccountDepositedV1.create({ amount: 100 }).creator("user", "ada"));
+  account.events.add(AccountWithdrawnV1.create({ amount: 30 }).creator("user", "ada"));
+  return Balance.build(account);
 };

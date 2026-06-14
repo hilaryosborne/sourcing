@@ -1,56 +1,46 @@
+// Strippers — the right-to-forget pass/fail. The decisive test (FOUNDATION §Strippers):
+// strip an aggregate, export its events, and assert NO PII survives. That is what proves
+// stripping works rather than merely appears to. Plus: identity is preserved, the original
+// is not mutated, and events without a matching stripper pass through unchanged.
 import { describe, it, expect } from "vitest";
-import { FileAggregate, FileCreateV1, FileRenameV1, creator } from "./fixtures";
+import { FileAggregate, FileCreateV1, FileRenameV1 } from "./fixtures";
 
-// The right-to-forget pass/fail test (testing skill / FOUNDATION §Strippers): after
-// strip(), walk the produced events and assert NO PII survives, identity is preserved,
-// and the original aggregate is untouched (strip is a pure derivation, not a mutation).
-const PII = "Alice Secret";
+const PII = "Alice Q. Privacy";
 
-const committedFile = () => {
+// A committed file stream carrying PII (the owner on create) plus a rename (no PII).
+const seeded = () => {
   const file = FileAggregate.instance("file-1");
-  file.add(FileCreateV1).by(creator).message({ name: "draft.txt", owner: PII });
-  file.add(FileRenameV1).by(creator).message({ name: "final.txt" });
-  file.commit(); // exercise stripping over the durable history, the real erasure case
+  file.events.add(FileCreateV1.create({ name: "draft.txt", owner: PII }).creator("user", "u1"));
+  file.events.add(FileRenameV1.create({ name: "final.txt" }).creator("user", "u1"));
+  file.events.commit(); // strip over the durable history — the real erasure case
   return file;
 };
 
-describe("aggregate.strip — right to forget", () => {
-  it("should leave no PII anywhere in the produced events", () => {
-    const stripped = committedFile().strip("gdpr");
-    const serialized = JSON.stringify(stripped.export());
-    expect(serialized).not.toContain(PII);
+describe("strip (right-to-forget)", () => {
+  it("produces events with NO PII surviving — the pass/fail test", () => {
+    const dump = JSON.stringify(seeded().strip("gdpr").events.export());
+    expect(dump).not.toContain(PII);
+    expect(dump).toContain("[redacted]");
   });
 
-  it("should redact the create payload to the stripper's value", () => {
-    const stripped = committedFile().strip("gdpr");
-    const create = stripped.export().find((event) => event.topic === "file.create.v1");
-    expect(create?.payload).toEqual({ name: "draft.txt", owner: "[redacted]" });
+  it("preserves identity per event (id, position, topic)", () => {
+    const original = seeded();
+    const identity = (events: ReturnType<typeof original.events.export>) =>
+      events.map((e) => ({ id: e.id, position: e.position, topic: e.topic }));
+    expect(identity(original.strip("gdpr").events.export())).toEqual(identity(original.events.export()));
   });
 
-  it("should preserve event identity and metadata across stripping", () => {
-    const original = committedFile();
-    const before = original.export()[0];
-    const after = original.strip("gdpr").export()[0];
-    expect(after?.id).toBe(before?.id);
-    expect(after?.position).toBe(before?.position);
-    expect(after?.creator).toEqual(before?.creator);
-    expect(after?.created).toBe(before?.created);
-  });
-
-  it("should leave events without a matching stripper unchanged (but as new instances)", () => {
-    const original = committedFile();
-    const beforeRename = original.export().find((event) => event.topic === "file.rename.v1");
-    const afterRename = original
-      .strip("gdpr")
-      .export()
-      .find((event) => event.topic === "file.rename.v1");
-    expect(afterRename).toEqual(beforeRename);
-  });
-
-  it("should not mutate the original aggregate — strip returns a new aggregate", () => {
-    const original = committedFile();
+  it("does not mutate the original aggregate", () => {
+    const original = seeded();
     original.strip("gdpr");
-    const serialized = JSON.stringify(original.export());
-    expect(serialized).toContain(PII); // the source of truth is untouched until persisted
+    expect(JSON.stringify(original.events.export())).toContain(PII);
+  });
+
+  it("passes through events that have no matching stripper, unchanged", () => {
+    const rename = seeded()
+      .strip("gdpr")
+      .events.export()
+      .find((e) => e.topic === "file.rename.v1");
+    expect(rename?.payload).toEqual({ name: "final.txt" });
   });
 });

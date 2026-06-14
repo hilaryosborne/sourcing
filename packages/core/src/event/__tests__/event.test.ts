@@ -1,70 +1,64 @@
+// Event layer: standalone creation, fluent provenance, validation at the boundary, the
+// create/restore split, and the unstaged-build guard.
 import { describe, it, expect } from "vitest";
 import { object, string } from "zod";
 import event from "../event";
 import { EventErrors } from "../event.errors";
-import type { EventEnvelopeV1Type } from "../event.schema";
-import { FileCreateV1 } from "../../__tests__/fixtures";
+import { FileCreateV1, committedEnvelopes } from "../../__tests__/fixtures";
 
-describe("event definition", () => {
-  it("should assign an id and created timestamp eagerly at creation, leaving staging fields unset", () => {
+describe("event", () => {
+  it("create() validates the payload immediately (fail fast)", () => {
+    expect(() => FileCreateV1.create({ name: "", owner: "Alice" })).toThrow(EventErrors.PAYLOAD_INVALID);
+  });
+
+  it("create() mints id + created eagerly, before staging", () => {
     const instance = FileCreateV1.create({ name: "draft.txt", owner: "Alice" });
-    expect(instance.get.id()).toBeTruthy();
-    expect(instance.get.created()).toBeTruthy();
-    expect(instance.get.payload()).toEqual({ name: "draft.txt", owner: "Alice" });
+    expect(instance.get.id()).toMatch(/.+/);
+    expect(instance.get.created()).toMatch(/\d{4}-\d{2}-\d{2}T/);
+    // Unstaged: no position / aggregate / creator yet.
     expect(instance.get.position()).toBeUndefined();
+    expect(instance.get.aggregate()).toBeUndefined();
     expect(instance.get.creator()).toBeUndefined();
   });
 
-  it("should give every created event a distinct id", () => {
-    const a = FileCreateV1.create({ name: "a", owner: "Alice" });
-    const b = FileCreateV1.create({ name: "b", owner: "Bob" });
-    expect(a.get.id()).not.toBe(b.get.id());
+  it("creator() and headers() decorate fluently", () => {
+    const instance = FileCreateV1.create({ name: "draft.txt", owner: "Alice" })
+      .creator("user", "u1")
+      .headers({ source: "import" });
+    expect(instance.get.creator()).toEqual({ entity: "user", uid: "u1" });
+    expect(instance.get.headers()).toEqual({ source: "import" });
   });
 
-  it("should reject a payload that fails its schema with PAYLOAD_INVALID", () => {
-    expect(() => FileCreateV1.create({ name: "a" } as never)).toThrow(EventErrors.PAYLOAD_INVALID);
-  });
-
-  it("should not be buildable before staging (no position/aggregate/creator yet)", () => {
-    const instance = FileCreateV1.create({ name: "a", owner: "Alice" });
+  it("build() throws on an unstaged event (no position/aggregate/creator)", () => {
+    const instance = FileCreateV1.create({ name: "draft.txt", owner: "Alice" }).creator("user", "u1");
     expect(() => instance.build()).toThrow();
   });
 
-  it("should reject a duplicate stripper name with STRIPPER_DUPLICATE", () => {
-    const definition = event("sample.v1", object({ secret: string() }));
-    definition.strip("gdpr", (payload) => payload);
-    expect(() => definition.strip("gdpr", (payload) => payload)).toThrow(EventErrors.STRIPPER_DUPLICATE);
-  });
-
-  it("should rehydrate a stored envelope via restore() without minting new identity", () => {
-    const envelope: EventEnvelopeV1Type = {
-      id: "fixed-id",
-      topic: "file.create.v1",
-      position: 3,
-      aggregate: { id: "file-1", name: "file" },
-      creator: { entity: "user", uid: "importer" },
-      headers: {},
-      created: "2020-01-01T00:00:00.000Z",
-      payload: { name: "stored.txt", owner: "Alice" },
-    };
-    const restored = FileCreateV1.restore(envelope);
-    expect(restored.get.id()).toBe("fixed-id");
-    expect(restored.get.position()).toBe(3);
-    expect(restored.get.creator()).toEqual({ entity: "user", uid: "importer" });
-    expect(restored.build()).toEqual(envelope);
-  });
-
-  it("should reject restoring an envelope whose payload fails the schema", () => {
-    const envelope = {
-      id: "x",
+  it("build() yields a full envelope once staged", () => {
+    const instance = FileCreateV1.create({ name: "draft.txt", owner: "Alice" })
+      .creator("user", "u1")
+      .stage({ id: "file-1", name: "file.v1" }, 0);
+    const envelope = instance.build();
+    expect(envelope).toMatchObject({
       topic: "file.create.v1",
       position: 0,
-      aggregate: { id: "file-1", name: "file" },
-      creator: { entity: "user", uid: "importer" },
-      headers: {},
-      created: "2020-01-01T00:00:00.000Z",
-      payload: { name: "missing owner" },
-    } as unknown as EventEnvelopeV1Type;
-    expect(() => FileCreateV1.restore(envelope)).toThrow();
+      aggregate: { id: "file-1", name: "file.v1" },
+      creator: { entity: "user", uid: "u1" },
+      payload: { name: "draft.txt", owner: "Alice" },
+    });
+  });
+
+  it("strip() registers contextually and rejects a duplicate name in one scope", () => {
+    const def = event("file.note.v1", object({ text: string() }));
+    def.strip("gdpr", (p) => ({ ...p, text: "" }));
+    expect(() => def.strip("gdpr", (p) => p)).toThrow(EventErrors.STRIPPER_DUPLICATE);
+  });
+
+  it("restore() rehydrates a stored envelope without minting new identity", () => {
+    const created = committedEnvelopes("file-9")[0]!;
+    const instance = FileCreateV1.restore(created);
+    expect(instance.get.id()).toBe(created.id);
+    expect(instance.get.position()).toBe(created.position);
+    expect(instance.build()).toEqual(created);
   });
 });
