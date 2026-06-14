@@ -195,3 +195,29 @@ A green suite is a floor, not a ceiling. On the record:
 Source-level real-adapter runs are forbidden: the original `dist/` smell was a cross-package
 _built-artifact_ bug, and a source-level run sails straight past that class — it would certify
 something narrower than the promise.
+
+---
+
+## Enforcement — how the promise stays true (ruling, Phase D close)
+
+The swappable promise decays the instant an adapter changes and nobody re-runs conformance
+against real services. A suite run by human discipline re-introduces the exact unreliability
+the suite exists to remove. **Ruling: conformance is a MACHINE gate, not a documented-manual
+one.** A documented-manual gate is rejected — it enforces by remembering, and the failure mode
+(an adapter edit by someone who isn't the author, shipped without a real-service run) is
+precisely when it matters most.
+
+Shape of the gate (decided here, to be built when CI is commissioned — there is no pipeline in
+this repo yet, and standing one up is its own scaffold decision, not a tail-of-Phase-D action):
+
+- **Two tiers.** A _fast_ tier (unit suite + eslint + prettier + commitlint) on every push, no
+  Docker. A _slow_ tier (conformance against MinIO + Postgres + a Mongo replica set) gated on
+  any change touching an adapter or the persistence contract, and on merge to the main branch.
+- **The clean-build precondition is PART of the gate**, not adjacent to it: the gate must
+  `build → resolve adapters by package name → run conformance against dist/`. A gate that ran
+  conformance against source would certify a thing consumers never install — the `dist/` smell,
+  re-admitted. The replica-set `rs.initiate` + wait-for-primary is a gate setup step, not an
+  out-of-band manual one.
+
+Until that gate exists, the promise is _enforced-by-decision_ (this ruling), not
+_enforced-by-machine_. Building the CI gate is the standing next-action that closes that gap.
