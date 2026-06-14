@@ -103,7 +103,19 @@ export const postgresStorage = async (
     // unique key enforces no-duplicate but not no-GAP, so APPEND_NOT_CONTIGUOUS is still
     // load-bearing, the same as on S3.
     append: async (stream, events, expectedHead) => {
-      if (events.length === 0) return;
+      if (events.length === 0) {
+        // Empty append honors expectedHead (Reading B): the compare is a precondition asserted
+        // whenever given, not a write-guard. Nothing to write, but a stale expectedHead conflicts.
+        if (expectedHead === undefined) return;
+        const res = await pg.query<{ head: string | null }>(
+          `SELECT max(position) AS head FROM ${eventsTable} WHERE stream_name = $1 AND stream_id = $2`,
+          [stream.name, stream.id],
+        );
+        const raw = res.rows[0]?.head;
+        const head = raw === null || raw === undefined ? undefined : Number(raw);
+        if (head !== expectedHead) throw new Error(StorageErrors.VERSION_CONFLICT);
+        return;
+      }
       const expectedStart = (expectedHead ?? -1) + 1;
       if (events[0]!.position !== expectedStart) throw new Error(StorageErrors.APPEND_NOT_CONTIGUOUS);
 
