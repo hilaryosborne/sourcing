@@ -83,7 +83,18 @@ export const mongoStorage = async (
     // Postgres, the mechanism is "unique index + transaction". APPEND_NOT_CONTIGUOUS stays its
     // own non-retryable error (the index enforces no-duplicate, not no-gap).
     append: async (stream, events, expectedHead) => {
-      if (events.length === 0) return;
+      if (events.length === 0) {
+        // Empty append honors expectedHead (Reading B): the compare is a precondition asserted
+        // whenever given, not a write-guard. Nothing to write, but a stale expectedHead conflicts.
+        if (expectedHead === undefined) return;
+        const docs = await mongo.find<EventDoc>(eventsCollection, streamFilter(stream), {
+          sort: { position: -1 },
+          limit: 1,
+        });
+        const head = docs[0]?.position;
+        if (head !== expectedHead) throw new Error(StorageErrors.VERSION_CONFLICT);
+        return;
+      }
       const expectedStart = (expectedHead ?? -1) + 1;
       if (events[0]!.position !== expectedStart) throw new Error(StorageErrors.APPEND_NOT_CONTIGUOUS);
       const docs: EventDoc[] = events.map((event) => ({

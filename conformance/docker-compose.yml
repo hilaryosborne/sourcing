@@ -16,3 +16,13 @@ services:
       POSTGRES_PASSWORD: postgres
     ports:
       - "5433:5432"
+
+  # Single-node REPLICA SET — Mongo's transaction floor (multi-document append/overwrite need
+  # it; FOUNDATION §"Mongo atomicity"). The set must be initiated once after start (rs.initiate);
+  # clients connect with directConnection=true so the driver talks to this node directly and does
+  # not chase a replica-set member host that isn't port-mapped out of the container.
+  mongo:
+    image: mongo:7
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27019:27017"
