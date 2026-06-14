@@ -175,6 +175,10 @@ The reference S3 adapter stores each aggregate as **one object** (`aggregates/{n
 3. **No cheap delta on S3.** There is no sub-object read on S3, so a STALE delta-fold reads the **whole** object — the same cost as a NO-STORED full build. **STALE provides no cost saving on the S3 adapter, by design.** This is a structural property, not a deferred optimization (relational/document adapters *can* read a delta cheaply; S3 cannot).
 4. **Concurrent forget — resolved by etag-CAS.** Two concurrent forgets both condition their write on the object's etag; the second is **rejected, not silently lost** — it retries against the new etag, re-reads the partially-redacted object, strips its own positions, and writes. Convergent under retry — this is the §"forget completion" property, now *guaranteed* by the single-file etag-CAS rather than left open.
 
+### Mongo adapter — operational precondition (transactions)
+
+The Mongo adapter requires a **transaction-capable deployment (replica set)** for atomic multi-event append; Mongo provides no single-statement multi-document atomic write, so the all-or-nothing commit guarantee is met by an explicit transaction. **This is an operational precondition of the adapter, not a feature of the port** — the strain was held OUT of the port (the contract is still `append(stream, events, expectedHead?)`, `VERSION_CONFLICT` still means the same fact, a consumer cannot tell Mongo needed a transaction). The shape-neutrality of the port across S3, Postgres, and Mongo was therefore *checked*, not assumed. Relatedly, the `(stream, position)` unique index IS the compare-and-append, so it is a precondition the adapter ensures at construction — without it, append has no CAS.
+
 ---
 
 ## What is explicitly OUT of scope for core

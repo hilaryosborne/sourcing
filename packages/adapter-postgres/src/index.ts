@@ -4,5 +4,5 @@
 // Phase D detail. Awaiting per-artefact ratification of the native-CAS append and
 // UPDATE-by-(stream, position) shapes before the conformance suite locks the contract.
 export { postgresStorage } from "./pg-storage";
-export { POSTGRES_SCHEMA, migrate, isUniqueViolation } from "./pg-client";
+export { isUniqueViolation } from "./pg-client";
 export type { PgClientPort, PgRows } from "./pg-client";

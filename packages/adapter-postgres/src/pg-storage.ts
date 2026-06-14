@@ -33,13 +33,38 @@ const asIdentifier = (name: string): string => {
   return name;
 };
 
-export const postgresStorage = (pg: PgClientPort, destinations: Partial<Destinations> = {}): StorageI => {
+// ASYNC factory: the (stream, position) UNIQUE INDEX is the compare-and-append, so it is a
+// PRECONDITION, not optional setup — the SAME enforcement standard as the Mongo adapter. A
+// table that exists but lacks the index (hand-provisioned, partial migration, skipped setup)
+// would let INSERT SUCCEED on a duplicate position, silently voiding the CAS and passing every
+// test against a properly-provisioned table. Ensuring the index here (idempotent; CREATE
+// UNIQUE INDEX IF NOT EXISTS covers a pre-existing un-indexed table) makes that unreachable
+// through this constructor. NO global sequence (deliberate; FOUNDATION §"Single adapter per
+// repository"). NB: NOT a relitigation of the ratified append/overwrite mechanism — only the
+// CAS precondition, brought to the Mongo standard.
+export const postgresStorage = async (
+  pg: PgClientPort,
+  destinations: Partial<Destinations> = {},
+): Promise<StorageI> => {
   const dest = resolveDestinations({ ...DEFAULT_DESTINATIONS, ...destinations });
   const eventsTable = asIdentifier(dest.events);
   const projectionsTable = asIdentifier(dest.projections);
   // dest.registry is intentionally unused: head reads the EVENTS table (the registry is a
   // view over the event head, ratified Gate 2). The slot exists for a materialized-registry
   // adapter; this reference adapter does not materialize one.
+
+  await pg.query(
+    `CREATE TABLE IF NOT EXISTS ${eventsTable} (stream_name text NOT NULL, stream_id text NOT NULL, position bigint NOT NULL, envelope jsonb NOT NULL)`,
+  );
+  await pg.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS ${eventsTable}_stream_position ON ${eventsTable} (stream_name, stream_id, position)`,
+  );
+  await pg.query(
+    `CREATE TABLE IF NOT EXISTS ${projectionsTable} (stream_name text NOT NULL, stream_id text NOT NULL, name text NOT NULL, position bigint NOT NULL, state jsonb NOT NULL)`,
+  );
+  await pg.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS ${projectionsTable}_stream_name ON ${projectionsTable} (stream_name, stream_id, name)`,
+  );
 
   return {
     head: async (stream) => {
