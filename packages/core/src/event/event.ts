@@ -23,7 +23,7 @@ export interface EventDefinition<P = unknown> {
   // within a single scope → EventErrors.STRIPPER_DUPLICATE.
   strip: (context: string, stripper: Stripper<P>) => EventDefinition<P>;
   // Validate `payload` against `schema`, assign id + created eagerly, return an
-  // unstaged instance. Staging (position/aggregate/creator) happens on the bowl.
+  // unstaged instance. Staging (position/aggregate/creator) happens on the aggregate.
   create: (payload: P) => EventInstance<P>;
   // The symmetric partner to create(): rehydrate an EventInstance from a complete,
   // already-persisted envelope WITHOUT minting new identity — it keeps the stored

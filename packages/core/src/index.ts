@@ -1,4 +1,4 @@
-// DRAFT — Epic 3, Phase A. Public API surface for @hilaryosborne/sourcing — the bowl.
+// DRAFT — Epic 3, Phase A. Public API surface for @hilaryosborne/sourcing — the aggregate.
 // In a published library the barrel IS the public API (coding-style "Files & modules"):
 // it curates the surface. What is exported here is the contract; anything not exported
 // is private. Shapes under review; awaiting per-artefact ratification (DRAFT-AND-HALT).
@@ -15,7 +15,7 @@ export { EventErrors } from "./event/event.errors";
 export { EventEnvelopeV1, CreatorSchemaV1, AggregateRefV1 } from "./event/event.schema";
 export type { EventEnvelopeV1Type, CreatorSchemaV1Type, AggregateRefV1Type } from "./event/event.schema";
 
-// --- Aggregate (the bowl) ---
+// --- Aggregate ---
 export { default as aggregate } from "./aggregate/aggregate";
 export type { AggregateDefinition, AggregateInstance, RegisteredEvent } from "./aggregate/aggregate";
 export type { StageDsl } from "./aggregate/aggregate.stage";

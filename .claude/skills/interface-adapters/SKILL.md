@@ -5,7 +5,7 @@ description: >-
   repository — the interface + base + concrete pattern, constructor DI with batteries-included
   defaults, barrels as the public API, per-module error enums, and universal-model + per-adapter
   mapping. Use when building the persistence layer and storage adapters (Epic 4, the
-  Postgres/Mongo/S3 fridges), any consumer-swappable seam (logger, cache, store), or the
+  Postgres/Mongo/S3 storage adapters), any consumer-swappable seam (logger, cache, store), or the
   published package surface. Assumes the `coding-style` foundation; this is the Mode-B recipe.
   Storage interface shapes are governed by FOUNDATION.md and ratified via DRAFT-AND-HALT.md.
 ---
@@ -41,7 +41,7 @@ const accounts = (region: string) => {
 
 Reach for **interface + base + concrete (this skill)** only when a *consumer* must implement or
 swap the thing behind a published contract. For our build that's the **storage adapters**
-(Postgres/Mongo/S3 fridges behind one storage interface). The persistence layer that composes
+(Postgres/Mongo/S3 behind one storage interface). The persistence layer that composes
 them (registry, projection store, self-healing) can itself be functional. The decision is
 **ownership / swappability**, never "is it IO?"
 

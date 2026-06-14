@@ -49,7 +49,7 @@ The epics are ordered by dependency. Each buildable epic produces something prov
 
 ## Epic 3 — Core sourcing library: draft → HALT → ratify → build → prove
 
-**Goal:** The bowl. Events (with strippers), the aggregate, the projection builder, the staged-events mechanism. **Zero storage concepts** (see FOUNDATION.md).
+**Goal:** The aggregate. Events (with strippers), the aggregate, the projection builder, the staged-events mechanism. **Zero storage concepts** (see FOUNDATION.md).
 
 **Phase A — Draft (then HALT):**
 - Draft the interfaces / type signatures / data-model shapes for: event definitions + strippers; the aggregate (import / add / committed / staged / export / position); the projection builder; the staged-events mechanism.
@@ -70,7 +70,7 @@ The epics are ordered by dependency. Each buildable epic produces something prov
 
 ## Epic 4 — Persistence layer + adapters: draft → HALT → ratify → build → prove
 
-**Goal:** The cook and the fridges. The persistence layer (aggregate registry, projection store, self-healing algorithm) composed on top of core, and the three reference adapters behind a shared interface.
+**Goal:** The repository and the storage adapters. The persistence layer (aggregate registry, projection store, self-healing algorithm) composed on top of core, and the three reference adapters behind a shared interface.
 
 This epic has two sub-layers. Keep them distinct — do not flatten the registry/algorithm into the adapters.
 
@@ -116,7 +116,7 @@ This epic has two sub-layers. Keep them distinct — do not flatten the registry
 **Goal:** Make the library usable by developers who want to *consume* it (not contribute to it).
 
 - **A five-star README**, audience = developers using the library. Lead with the mental model and a fast "first projection in 60 seconds," then the three scenarios, then the right-to-forget story. Consumer-facing, not contributor-facing.
-- **A concepts skill/doc** teaching the mental model — bowl / cook / fridge, strippers, staged events, self-healing. Someone who doesn't grasp the model will misuse the parts; this is the "why."
+- **A concepts skill/doc** teaching the mental model — aggregate / repository / storage adapter, strippers, staged events, self-healing. Someone who doesn't grasp the model will misuse the parts; this is the "why."
 - **Four component skills** for working with the library via an AI assistant: one each for **events**, **aggregates**, **projections**, and **storage adapters**. These are the consumer counterpart to the Epic 1 styling skill (which was about writing *in* the repo; these are about *using* the published packages).
 - Contributor docs are secondary; cover them lightly.
 

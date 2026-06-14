@@ -4,6 +4,12 @@
 # the style skill is ratified.
 .style-input/
 
+# Reference example library — Hilary's prior sourcing implementation, placed
+# for illustration only (CLAUDE.md: "architecture lives in the rulings, not the
+# sample code"; FOUNDATION + rulings win where they disagree). NEVER tracked,
+# NEVER committed; verbatim source must never reach history.
+ref/
+
 # Dependencies
 node_modules/
 

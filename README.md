@@ -8,26 +8,26 @@ storage opinions.
 > The consumer-facing, five-star README lands in Epic 6. This file is the
 > contributor signpost for the scaffold.
 
-## The mental model: bowl, cook, fridge
+## The mental model: aggregate, repository, storage adapter
 
-- **The aggregate is a bowl** — it holds events, keeping committed separate from
+- **The aggregate** — it holds events, keeping committed separate from
   staged. It does not know where events come from or go.
-- **The persistence layer is the cook** — it fetches from storage, fills the bowl,
+- **The persistence layer is the repository** — it fetches from storage, fills the aggregate,
   reads the result, decides what to store. Lives outside core.
-- **Storage is the fridge** — Postgres, Mongo, S3. The cook opens it; the bowl
+- **Storage is the storage adapter** — Postgres, Mongo, S3. The repository opens it; the aggregate
   does not know it exists.
 
 See **FOUNDATION.md** for the full conceptual model — it is the architecture.
 
 ## Packages
 
-| Package                                    | Role                                                  |        |
-| ------------------------------------------ | ----------------------------------------------------- | ------ |
-| `@hilaryosborne/sourcing`                  | the bowl — events, aggregates, projections, strippers | Epic 3 |
-| `@hilaryosborne/sourcing-persistence`      | the cook — registry, projection store, self-healing   | Epic 4 |
-| `@hilaryosborne/sourcing-adapter-postgres` | a fridge — Postgres                                   | Epic 4 |
-| `@hilaryosborne/sourcing-adapter-mongo`    | a fridge — Mongo                                      | Epic 4 |
-| `@hilaryosborne/sourcing-adapter-s3`       | a fridge — S3 (the brutal one)                        | Epic 4 |
+| Package                                    | Role                                                       |        |
+| ------------------------------------------ | ---------------------------------------------------------- | ------ |
+| `@hilaryosborne/sourcing`                  | the aggregate — events, aggregates, projections, strippers | Epic 3 |
+| `@hilaryosborne/sourcing-persistence`      | the repository — registry, projection store, self-healing  | Epic 4 |
+| `@hilaryosborne/sourcing-adapter-postgres` | a storage adapter — Postgres                               | Epic 4 |
+| `@hilaryosborne/sourcing-adapter-mongo`    | a storage adapter — Mongo                                  | Epic 4 |
+| `@hilaryosborne/sourcing-adapter-s3`       | a storage adapter — S3 (the brutal one)                    | Epic 4 |
 
 Core depends on nothing but Zod and nanoid. Persistence depends on core; core
 never depends on it. Adapters implement the persistence storage interface.

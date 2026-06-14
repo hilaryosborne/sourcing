@@ -16,7 +16,7 @@ export interface EventInstance<P = unknown> {
     topic: () => string;
     payload: () => P;
     created: () => string;
-    // Staging fields — undefined until the event is staged onto a bowl.
+    // Staging fields — undefined until the event is staged onto an aggregate.
     position: () => number | undefined;
     aggregate: () => AggregateRefV1Type | undefined;
     creator: () => CreatorSchemaV1Type | undefined;
@@ -89,7 +89,7 @@ const make = <P>(schema: ZodType<P>, strippers: Map<string, Stripper<P>>, data: 
 };
 
 // Fresh creation: mint id + created eagerly (captured as facts, never replayed);
-// staging fields stay unset until the bowl assigns them.
+// staging fields stay unset until the aggregate assigns them.
 export const eventInstance = <P>(
   topic: string,
   schema: ZodType<P>,

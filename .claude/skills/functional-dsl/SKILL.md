@@ -13,7 +13,7 @@ description: >-
 # functional-dsl — building the domain core
 
 This is **Mode A** from `coding-style` §5: the functional construction style for the domain
-mechanism — the bowl, the facts, the folds. No classes, no `this`, no `new`. Closures over a
+mechanism — the aggregate, the facts, the folds. No classes, no `this`, no `new`. Closures over a
 `state` object, pure derivations, fluent DSLs that read like a story.
 
 > Scope note: FOUNDATION.md owns *what* the core is (events with strippers, the aggregate's
@@ -81,7 +81,7 @@ export type AccountEmailAddV1Type = z.infer<typeof AccountEmailAddV1>;
 
 ## Aggregates — faithful containers
 
-An aggregate is the **bowl**: it holds a stream for one id and nothing more. It enforces no
+An aggregate holds a stream for one id and nothing more. It enforces no
 business rules and makes no judgements.
 
 - **Definition** = a name + its registered event types (the events that are legal on it; this

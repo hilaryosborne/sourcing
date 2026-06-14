@@ -1,7 +1,7 @@
 // Worked example — Scenario 1: projections on demand (FOUNDATION.md). The purest use
 // of the library: events live only in memory, the projection is folded out of them on
-// the spot, nothing is stored. No persistence package, no cook, no fridge — just the
-// bowl and a pure builder. This file is built entirely from the public API.
+// the spot, nothing is stored. No persistence package, no repository, no storage adapter — just the
+// aggregate and a pure builder. This file is built entirely from the public API.
 import { event, aggregate, projection } from "../index";
 import { object, string, number } from "zod";
 import type { z } from "zod";
@@ -12,7 +12,7 @@ const AccountOpenedV1 = event("account.opened.v1", object({ holder: string().min
 const MoneyDepositedV1 = event("account.deposited.v1", object({ amount: number().int().positive() }));
 const MoneyWithdrawnV1 = event("account.withdrawn.v1", object({ amount: number().int().positive() }));
 
-// 2. Declare the aggregate — the bowl, and the events legal on it.
+// 2. Declare the aggregate — the events legal on it.
 const AccountAggregate = aggregate("account", [AccountOpenedV1, MoneyDepositedV1, MoneyWithdrawnV1]);
 
 // 3. Declare the read-model and the pure reducers that fold events into it.
@@ -52,7 +52,7 @@ const AccountBalanceProjection = projection({
 
 const creator = { entity: "user", uid: "demo" } as const;
 
-// The story, top to bottom: open a bowl, stage facts (each validated as it lands),
+// The story, top to bottom: open an aggregate, stage facts (each validated as it lands),
 // then fold the would-be state on demand. The consumer — not the library — decides
 // what the numbers mean (e.g. whether a withdrawal overdraws). Mechanism, not judgment.
 export const run = (): AccountBalanceV1Type => {

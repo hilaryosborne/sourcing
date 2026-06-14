@@ -30,7 +30,7 @@ export type AggregateRefV1Type = z.infer<typeof AggregateRefV1>;
 //   created at creation : id, topic, payload, created
 //   assigned at staging : position, aggregate, creator, headers
 // A freshly-created-but-unstaged event therefore cannot satisfy this schema yet —
-// build() only yields a full envelope once the event has been staged onto a bowl
+// build() only yields a full envelope once the event has been staged onto an aggregate
 // (staging fills position/aggregate/creator; parse() rejects them missing).
 export const EventEnvelopeV1 = object({
   // Intrinsic identity, assigned eagerly at creation so a staged event is
@@ -41,7 +41,7 @@ export const EventEnvelopeV1 = object({
   topic: string().min(1),
 
   // Single, stream-local index within this aggregate's stream. Provisional at
-  // staging; 0-based. Cross-stream/global sequence is the cook's concern, not here.
+  // staging; 0-based. Cross-stream/global sequence is the repository's concern, not here.
   position: number().int().min(0),
 
   aggregate: AggregateRefV1,

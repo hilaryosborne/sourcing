@@ -6,7 +6,9 @@ import globals from "globals";
 // console in shipped code, no unused bindings, consistent type-only imports.
 // Formatting is Prettier's job and intentionally absent here.
 export default tseslint.config(
-  { ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**"] },
+  // ref/ holds prior example libraries kept purely for illustration (git-ignored,
+  // never shipped). It is not ours to lint — exclude it like build output.
+  { ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", "ref/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

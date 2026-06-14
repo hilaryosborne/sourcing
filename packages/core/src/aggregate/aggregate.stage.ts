@@ -5,7 +5,7 @@
 //
 // message() parses its payload immediately (fail fast, before anything commits),
 // assigns the provisional position + aggregate reference + required creator, and
-// pushes the new event onto the bowl's STAGED set, returning the bowl so further
+// pushes the new event onto the aggregate's STAGED set, returning the aggregate so further
 // facts can be staged in one chain. Half-writing is the disaster this prevents.
 import type { EventDefinition } from "../event/event";
 import type { EventInstance } from "../event/event.instance";
@@ -21,13 +21,13 @@ export interface StageDsl<P = unknown> {
   by: (creator: CreatorSchemaV1Type) => StageDsl<P>;
   // Optional decoration, defaults to empty if never called.
   headers: (headers: Record<string, unknown>) => StageDsl<P>;
-  // Terminal: validate payload, mint + stage the event, return the bowl.
+  // Terminal: validate payload, mint + stage the event, return the aggregate.
   message: (payload: P) => AggregateInstance;
 }
 
-// The next provisional position: one past the highest the bowl can see, 0 for empty.
+// The next provisional position: one past the highest the aggregate can see, 0 for empty.
 // Two processes staging onto separately-loaded copies will both pick the same index —
-// reconciling that is the cook's job, not core's (FOUNDATION §Events).
+// reconciling that is the repository's job, not core's (FOUNDATION §Events).
 const nextPosition = (state: AggregateState): number => {
   const positions = [...state.committed, ...state.staged]
     .map((event) => event.get.position())

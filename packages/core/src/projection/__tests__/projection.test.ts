@@ -4,25 +4,25 @@ import projection from "../projection";
 import { ProjectionErrors } from "../projection.errors";
 import { FileAggregate, FileProjection, FileCreateV1, FileRenameV1, creator } from "../../__tests__/fixtures";
 
-// A bowl with a create then a rename staged — the standard fold input.
-const stagedBowl = () => {
-  const bowl = FileAggregate.instance("file-1");
-  bowl.add(FileCreateV1).by(creator).message({ name: "draft.txt", owner: "Alice" });
-  bowl.add(FileRenameV1).by(creator).message({ name: "final.txt" });
-  return bowl;
+// An aggregate with a create then a rename staged — the standard fold input.
+const stagedFile = () => {
+  const file = FileAggregate.instance("file-1");
+  file.add(FileCreateV1).by(creator).message({ name: "draft.txt", owner: "Alice" });
+  file.add(FileRenameV1).by(creator).message({ name: "final.txt" });
+  return file;
 };
 
 describe("projection builder", () => {
   it("should fold events into the read-model (Scenario 1, on demand)", () => {
-    const model = FileProjection.build(stagedBowl().get.events());
+    const model = FileProjection.build(stagedFile().get.events());
     expect(model).toEqual({ name: "final.txt", owner: "Alice", events: 2 });
   });
 
   it("should apply staged events on top of committed ones (Scenario 3 overlay)", () => {
-    const bowl = stagedBowl();
-    bowl.commit(); // create + rename now committed
-    bowl.add(FileRenameV1).by(creator).message({ name: "renamed-again.txt" });
-    const model = FileProjection.build(bowl.get.events());
+    const file = stagedFile();
+    file.commit(); // create + rename now committed
+    file.add(FileRenameV1).by(creator).message({ name: "renamed-again.txt" });
+    const model = FileProjection.build(file.get.events());
     expect(model).toEqual({ name: "renamed-again.txt", owner: "Alice", events: 3 });
   });
 
@@ -35,12 +35,12 @@ describe("projection builder", () => {
       ],
     });
     // The rename event has no handler here — it must be folded over without throwing.
-    const model = createOnly.build(stagedBowl().get.events());
+    const model = createOnly.build(stagedFile().get.events());
     expect(model).toEqual({ name: "seen", events: 1 });
   });
 
   it("should be deterministic — the same events rebuild the identical read-model", () => {
-    const events = stagedBowl().get.events();
+    const events = stagedFile().get.events();
     expect(FileProjection.build(events)).toEqual(FileProjection.build(events));
   });
 
@@ -73,6 +73,6 @@ describe("projection builder", () => {
       initial: { events: 0 },
       handlers: [{ topic: "file.create.v1", apply: () => ({ events: "not-a-number" }) as never }],
     });
-    expect(() => broken.build(stagedBowl().get.events())).toThrow(ProjectionErrors.OUTPUT_INVALID);
+    expect(() => broken.build(stagedFile().get.events())).toThrow(ProjectionErrors.OUTPUT_INVALID);
   });
 });

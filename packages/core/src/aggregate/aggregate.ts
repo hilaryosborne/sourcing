@@ -1,4 +1,4 @@
-// The aggregate — the BOWL. A faithful container for one id's event stream. It holds
+// The aggregate — the AGGREGATE. A faithful container for one id's event stream. It holds
 // events, keeps committed apart from staged, and reports its position. It does NOT
 // fetch, store, orchestrate, or judge (FOUNDATION §Aggregates). Two levels:
 // definition (name + legal events) and instance (an id + the stream).
@@ -9,8 +9,8 @@ import type { StageDsl } from "./aggregate.stage";
 import { stage } from "./aggregate.stage";
 import { AggregateErrors } from "./aggregate.errors";
 
-// The bowl's mutable working state: the committed/staged split. Mutated in place as a
-// builder (style "Immutability"); reads hand out copies, strip() forks a new bowl.
+// The aggregate's mutable working state: the committed/staged split. Mutated in place as a
+// builder (style "Immutability"); reads hand out copies, strip() forks a new aggregate.
 export interface AggregateState {
   committed: EventInstance[];
   staged: EventInstance[];
@@ -40,25 +40,25 @@ export interface AggregateInstance {
     // committed ++ staged, in position order — the event set you fold to preview the
     // would-be state (the Scenario 3 overlay). Pass this to projection.build().
     events: () => EventInstance[];
-    // Head index in the bowl: the highest position it can see, or undefined if empty.
+    // Head index in the aggregate: the highest position it can see, or undefined if empty.
     position: () => number | undefined;
   };
-  // Load durable history into `committed` (the cook fills the bowl). Rehydrates each
+  // Load durable history into `committed` (the repository fills the aggregate). Rehydrates each
   // envelope via its definition; an unregistered topic throws TOPIC_UNKNOWN, a
   // malformed envelope throws EVENT_INVALID.
   import: (events: EventEnvelopeV1Type[]) => AggregateInstance;
   // Begin staging a new fact. `definition` must be registered on the aggregate
   // definition, else AggregateErrors.TOPIC_UNKNOWN. Returns the staging dsl.
   add: <P>(definition: EventDefinition<P>) => StageDsl<P>;
-  // In-memory bookkeeping only: fold `staged` into `committed`. Models the bowl AFTER
-  // the cook has persisted the staged events. Stores nothing — core has no storage.
+  // In-memory bookkeeping only: fold `staged` into `committed`. Models the aggregate AFTER
+  // the repository has persisted the staged events. Stores nothing — core has no storage.
   commit: () => AggregateInstance;
-  // Right-to-forget at the bowl level: walk committed + staged and apply the named
+  // Right-to-forget at the aggregate level: walk committed + staged and apply the named
   // stripper to each event whose definition has one, returning a NEW aggregate with
   // redacted events. Identity preserved per event; nothing mutated in place; no
   // marker appended. The pass/fail test: no PII survives in the produced events.
   strip: (context: string) => AggregateInstance;
-  // Expose the bowl's events (committed ++ staged) as plain validated envelopes.
+  // Expose the aggregate's events (committed ++ staged) as plain validated envelopes.
   export: () => EventEnvelopeV1Type[];
 }
 
@@ -69,7 +69,7 @@ export interface AggregateDefinition {
   events: RegisteredEvent[];
   // Look up a registered event by topic (used by staging + import).
   topic: (topic: string) => RegisteredEvent | undefined;
-  // Mint a fresh, empty bowl for one aggregate id.
+  // Mint a fresh, empty aggregate for one aggregate id.
   instance: (id: string) => AggregateInstance;
 }
 
