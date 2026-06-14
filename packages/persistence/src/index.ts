@@ -27,3 +27,4 @@ export type { ProjectionStoreI } from "./projection-store/projection-store";
 // --- The repository (write path + self-healing + right-to-forget) ---
 export { default as repository } from "./repository/repository";
 export type { RepositoryI, RepositoryDeps, RebuildInput, ForgetInput } from "./repository/repository";
+export { RepositoryErrors } from "./repository/repository.errors";

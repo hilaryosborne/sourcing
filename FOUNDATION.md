@@ -162,6 +162,8 @@ That is why concurrency, overwrite, and projection-cleanup are expressed as **ad
 
 **Known boundary (recorded, not this work):** migrating a stream between stores creates a transient **head-handoff** — briefly two candidate heads exist. Noted here so it is discovered on paper, not under load.
 
+**Known boundary — forget completion is an operational obligation.** Forget is **not atomic** across its steps (read → strip → overwrite → bin projections). It is **idempotent and convergent under retry**: re-running from the top heals any partial-failure state (strip of a redacted payload is identity-preserving; overwrite of redacted-over-redacted is a no-op in effect; bin deletes whatever is cached). The PII guarantee is therefore **contingent on completion.** A forget that fails *after* overwrite but *before* bin must be retried until bin succeeds — otherwise PII may persist in a cached projection (the stream head does not move under in-place redaction, so a stale projection can read as "current"). For an operation whose purpose is right-to-forget compliance, **completion is an operational obligation, not best-effort.**
+
 ---
 
 ## What is explicitly OUT of scope for core

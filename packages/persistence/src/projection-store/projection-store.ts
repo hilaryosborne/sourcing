@@ -1,7 +1,8 @@
-// DRAFT — Epic 4, Phase A (redraft). THE PROJECTION STORE — load / save / delete a
+// DRAFT — Epic 4, Phase B (implementation). THE PROJECTION STORE — load / save / delete a
 // projection with its bookmark (FOUNDATION §Scenario 2). A persistence-layer contract
-// composed on top of a storage adapter; core has no stored-projection concept. Awaiting
-// per-artefact ratification (DRAFT-AND-HALT.md).
+// composed on top of a storage adapter; core has no stored-projection concept. Implemented
+// against the ratified Gate 3 contract; awaiting per-artefact ratification (DRAFT-AND-HALT).
+// Do not compose this into the repository until ratified.
 //
 // A thin, intention-revealing wrapper over StorageProjectionsI: the store speaks in
 // (stream, name) and StoredProjection; the self-healing algorithm speaks to the store.
@@ -26,10 +27,18 @@ export interface ProjectionStoreI {
 }
 
 // projectionStore(storage) — bind a storage adapter as the projection store. The repository
-// auto-wires this from its one storage adapter; exposed standalone for testing.
-export const projectionStore = (storage: StorageProjectionsI): ProjectionStoreI => {
-  void storage;
-  throw new Error("not implemented — awaiting ratification");
-};
+// auto-wires this from its one storage adapter; exposed standalone for testing. A thin,
+// intention-revealing wrapper: it speaks (stream, name) + StoredProjection and DELEGATES to
+// the adapter capabilities — it bakes in no storage strategy of its own.
+export const projectionStore = (storage: StorageProjectionsI): ProjectionStoreI => ({
+  load: (stream, name) => storage.loadProjection(stream, name),
+  save: (stored) => storage.saveProjection(stored),
+  // The seam forget's bin-all delegates to: cleanup is the ADAPTER's capability ("remove
+  // every projection for this stream"), fulfilled however the backend must (our adapters
+  // delete by prefix; a consumer who spreads projections supplies their own cleanup behind
+  // the same seam). NO prefix scan or colocation assumption is baked in at THIS layer
+  // (FOUNDATION §"Single adapter per repository").
+  delete: (stream) => storage.deleteProjections(stream),
+});
 
 export default projectionStore;
