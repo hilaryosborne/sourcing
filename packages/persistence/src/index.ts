@@ -10,6 +10,10 @@
 //   3. the projection store contract
 //   4. the repository (write path + self-healing read path + right-to-forget)
 
+// --- Configurable destinations (the non-prohibition seam) ---
+export { resolveDestinations } from "./destinations/destinations";
+export type { Destinations, ResolvedDestinations } from "./destinations/destinations";
+
 // --- The storage interface (the port adapters implement) ---
 export type { StorageI, StorageEventsI, StorageProjectionsI } from "./storage/storage.interface";
 export { StorageErrors } from "./storage/storage.errors";

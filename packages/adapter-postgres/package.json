@@ -1,7 +1,7 @@
 {
   "name": "@hilaryosborne/sourcing-adapter-postgres",
   "version": "0.0.0",
-  "description": "A fridge — Postgres implementation of the persistence-layer storage interface.",
+  "description": "Postgres implementation of the persistence-layer storage interface.",
   "license": "MIT",
   "author": "Hilary Osborne",
   "type": "module",

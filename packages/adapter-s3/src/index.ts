@@ -4,4 +4,5 @@
 // wiring is a Phase D detail. Awaiting per-artefact ratification of the concurrency-emulation
 // and overwrite-by-position shapes before the conformance suite locks the contract.
 export { s3Storage } from "./s3-storage";
+export type { S3Config } from "./s3-storage";
 export type { S3ClientPort } from "./s3-client";
