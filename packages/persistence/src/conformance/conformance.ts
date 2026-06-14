@@ -115,7 +115,10 @@ export const runConformance = (makeStorage: () => Promise<StorageI>): void => {
 
     it("rejects with VERSION_CONFLICT when expectedHead does not match, and writes nothing", async () => {
       const storage = await seeded(makeStorage, 3); // head 2
-      await expect(storage.append(STREAM_A, [env(STREAM_A, 3)], 0)).rejects.toThrow(StorageErrors.VERSION_CONFLICT);
+      // ISOLATE the CAS: the event is contiguous to expectedHead (0 → position 1), so the
+      // contiguity precondition PASSES and only the stale-head CAS can fire. An input that also
+      // violated contiguity would depend on each adapter's check-order (a non-adapter-blind test).
+      await expect(storage.append(STREAM_A, [env(STREAM_A, 1)], 0)).rejects.toThrow(StorageErrors.VERSION_CONFLICT);
       expect(await storage.head(STREAM_A)).toBe(2);
       expect(positions(await storage.read(STREAM_A))).toEqual([0, 1, 2]);
     });

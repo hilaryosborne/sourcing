@@ -92,7 +92,14 @@ export const s3Storage = (s3: S3ClientPort, config: S3Config, destinations: Part
 
     // ── etag-CAS APPEND (flagged for ratification) ────────────────────────────────────────
     append: async (stream, events, expectedHead) => {
-      if (events.length === 0) return;
+      if (events.length === 0) {
+        // Empty append honors expectedHead (Reading B): the compare is a precondition asserted
+        // whenever given, not a write-guard. Nothing to write, but a stale expectedHead conflicts.
+        if (expectedHead === undefined) return;
+        const head = await readObject(stream).then((obj) => (obj ? headOf(obj.events) : undefined));
+        if (head !== expectedHead) throw new Error(StorageErrors.VERSION_CONFLICT);
+        return;
+      }
 
       // Contiguity precondition — LOAD-BEARING under single-file: its OWN error (caller bug),
       // distinct from VERSION_CONFLICT, because the key no longer encodes position.

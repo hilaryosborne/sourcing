@@ -26,4 +26,10 @@ export default tseslint.config(
     files: ["**/*.test.ts"],
     rules: { "no-console": "off" },
   },
+  {
+    // conformance/ holds Phase D test infrastructure + dev probes against real services;
+    // console output is their purpose, not stray logging in shipped code.
+    files: ["conformance/**"],
+    rules: { "no-console": "off" },
+  },
 );

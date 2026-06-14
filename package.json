@@ -25,10 +25,16 @@
     "prepare": "husky"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1068.0",
     "@changesets/cli": "^2.27.0",
     "@commitlint/cli": "^19.5.0",
     "@commitlint/config-conventional": "^19.5.0",
     "@eslint/js": "^9.14.0",
+    "@hilaryosborne/sourcing": "workspace:^",
+    "@hilaryosborne/sourcing-adapter-mongo": "workspace:^",
+    "@hilaryosborne/sourcing-adapter-postgres": "workspace:^",
+    "@hilaryosborne/sourcing-adapter-s3": "workspace:^",
+    "@hilaryosborne/sourcing-persistence": "workspace:^",
     "@types/node": "^22.9.0",
     "@vitest/coverage-v8": "^2.1.0",
     "eslint": "^9.14.0",

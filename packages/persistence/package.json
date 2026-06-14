@@ -1,7 +1,7 @@
 {
   "name": "@hilaryosborne/sourcing-persistence",
   "version": "0.0.0",
-  "description": "The cook — aggregate registry, projection store, and the self-healing algorithm. Composes core with storage.",
+  "description": "The persistence layer (the repository) — aggregate registry, projection store, and the self-healing algorithm. Composes core with storage.",
   "license": "MIT",
   "author": "Hilary Osborne",
   "type": "module",
