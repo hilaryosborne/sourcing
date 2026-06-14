@@ -145,7 +145,22 @@ Three deliberately different reference adapters are in scope. They are chosen as
 Anything all three can do (or be made to do under the hood) is in scope for the interface. Anything that *requires* one store's special powers cannot be in the shared interface — it would have to be an optional advertised capability, or it's out of scope. **The storage interface itself is drafted by you and ratified by Hilary before any adapter is built** (Epic 4, Draft-and-Halt).
 
 ### Right-to-forget and the storage interface
-Erasure requires *overwriting* events in place (the stripped payload replaces the original). Append is easy everywhere; overwrite is the operation that pressure-tests the interface hardest — trivial in Postgres/Mongo, expensive in S3 (you rewrite whichever object holds the event, and if events are batched per object you rewrite the batch). Flag this explicitly when drafting the interface.
+Erasure requires *overwriting* events in place (the stripped payload replaces the original). Append is easy everywhere; overwrite is the operation that pressure-tests the interface hardest — trivial in Postgres/Mongo, expensive in S3 (you rewrite whichever object holds the event, and if events are batched per object you rewrite the batch). Flag this explicitly when drafting the interface. **Overwrite is the one sanctioned exception to append-only; it exists for erasure alone and is never a general-purpose update** (to correct a fact, append a new event).
+
+---
+
+## Single adapter per repository; spread is the consumer's concern (non-prohibition)
+
+The library ships a **single persistence adapter per repository.** Spreading a stream — or its projections — across multiple stores is a **consuming-service concern**: the plumbing, querying, and stitching are theirs, not ours. The library's obligation is **non-prohibition** — no core or repository feature may assume single-store in a way that *blocks* a consumer from supplying their own spread implementation behind the port. This is a **scope-and-restraint** statement, not a distributed-storage solution: **we do not solve spread; we do not prohibit it.**
+
+That is why concurrency, overwrite, and projection-cleanup are expressed as **adapter capabilities, not repository-baked assumptions.** The repository assumes only "*this* adapter's head" and "*this* adapter's cleanup" — never anything global:
+
+- **Optimistic concurrency** — `append(stream, events, expectedHead?)` → `VERSION_CONFLICT` on mismatch — is a **mandatory** capability of every adapter: a compare-and-append against *that adapter's* head. `expectedHead` is optional at the call site (blind appends allowed); the capability is not optional. The justification is "this is what a single adapter does," not a consensus argument. S3 emulates it behind the port (conditional writes / preconditions); ugly is fine, absent is not.
+- **Overwrite** (right-to-forget) is keyed by **`(stream, position)`** — within one adapter, position is the unambiguous address of a fact. The event `id`/uid is the key for append-time dedup/idempotency, **not** the overwrite key (never a uid scan-to-find).
+- **Projection cleanup** under `forget` is an **adapter capability** ("remove every projection for this stream"). Our adapters colocate a stream's projections and fulfil it with a prefix-delete; a consumer who spreads projections supplies their own cleanup behind the same seam. The repository never bakes in a prefix scan.
+- **Global / cross-stream ordering** is an **optional** advertised capability, never promised by the shared port. Adapters that can offer it cheaply (a single Postgres) may expose it; those that can't (S3, absent an external sequencer) don't. Consumers needing cross-stream order opt into an adapter that provides it.
+
+**Known boundary (recorded, not this work):** migrating a stream between stores creates a transient **head-handoff** — briefly two candidate heads exist. Noted here so it is discovered on paper, not under load.
 
 ---
 

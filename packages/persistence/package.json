@@ -28,6 +28,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@hilaryosborne/sourcing": "workspace:*"
+    "@hilaryosborne/sourcing": "workspace:*",
+    "zod": "^4.0.0"
   }
 }
