@@ -27,9 +27,18 @@ export const memoryStorage = (): StorageI => {
     append: async (stream, incoming, expectedHead) => {
       const k = key(stream);
       const current = streams.get(k) ?? [];
-      // Optimistic-concurrency guard: compare against THIS store's head.
+      // Reading B: expectedHead is the expected version — asserted whenever given, empty batches
+      // included (the compare in compare-and-append is a precondition, not a write-guard).
       if (expectedHead !== undefined && headOf(current) !== expectedHead)
         throw new Error(StorageErrors.VERSION_CONFLICT);
+      if (incoming.length === 0) return;
+      // Contiguity: the staged events must follow expectedHead. Its own error (caller bug, not a
+      // concurrency loss) — and load-bearing, since position-uniqueness catches duplicates, not gaps.
+      if (incoming[0]!.position !== (expectedHead ?? -1) + 1) throw new Error(StorageErrors.APPEND_NOT_CONTIGUOUS);
+      // CAS backstop via position-uniqueness: a position is never written twice. This catches a
+      // blind append at a taken position (e.g. a second create, where expectedHead is omitted).
+      const taken = new Set(current.map((event) => event.position));
+      if (incoming.some((event) => taken.has(event.position))) throw new Error(StorageErrors.VERSION_CONFLICT);
       streams.set(k, [...current, ...incoming]);
     },
 
