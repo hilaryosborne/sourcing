@@ -50,3 +50,17 @@ export type {
   ObserverLevel,
   ObserverData,
 } from "./observer/observer.interface";
+
+// --- Cross-stream read models (the firehose: fold MANY streams into one view) ---
+// A read model is a pure cross-stream fold; the feed is an OPTIONAL adapter capability (global
+// ordering, kept off the shared StorageI port); the processor is the resumable catch-up wire.
+// Design + open questions: docs/internal/design/cross-stream-read-models.md.
+export { readModel } from "./read-model/read-model";
+export type { ReadModelDefinition, ReadModelHandler } from "./read-model/read-model";
+export { ReadModelErrors } from "./read-model/read-model.errors";
+export { StoredReadModelV1 } from "./read-model/read-model.model";
+export type { StoredReadModelV1Type } from "./read-model/read-model.model";
+export type { ReadModelStoreI } from "./read-model/read-model.store";
+export type { StorageFeedI, FeedEntry, FeedPage, FeedCursor } from "./feed/feed";
+export { processor } from "./processor/processor";
+export type { ProcessorI, ProcessorDeps, CatchUpOptions } from "./processor/processor";

@@ -10,4 +10,6 @@ These are the **build-process documents**: the architecture-of-record and the wo
 | [TOOLING.md](./TOOLING.md) | The ratified tooling and convention decisions (pnpm, tsup, Vitest, ESLint, Prettier, Changesets). |
 | [REFINEMENTS.md](./REFINEMENTS.md) | The adoption-readiness backlog — the tech-lead questions for production use, with gaps and directions, prioritised. |
 
+Deeper design explorations live under [`design/`](./design/) — e.g. [cross-stream read models](./design/cross-stream-read-models.md), the working-through of a feature before (or as) it's built.
+
 The agent operating manual for this repository is [`.claude/CLAUDE.md`](../../.claude/CLAUDE.md); the development style skills are under [`.claude/skills/`](../../.claude/skills/).
