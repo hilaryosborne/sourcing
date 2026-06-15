@@ -1,0 +1,73 @@
+# Slow tier — the MACHINE conformance gate (ruled in ae64d36 / persistence/CONFORMANCE.md).
+# Certifies every adapter against the REAL service it talks to, through the parameterized suite,
+# against the BUILT dist (resolved by package name, the way a consumer installs it) — never a
+# source-level run. The clean-build precondition is baked into `pnpm test:conformance` itself,
+# so the gate and the local command are the same thing.
+#
+# Trigger policy: always on push to main (the backstop — main must stay certified), and on PRs
+# that touch the contract or any adapter. A PR that only edits docs or the README does not pay
+# the Docker cost.
+name: Conformance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "packages/core/**"
+      - "packages/persistence/**"
+      - "packages/adapter-*/**"
+      - "conformance/**"
+      - ".github/workflows/conformance.yml"
+
+concurrency:
+  group: conformance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify:
+    name: Adapters vs real services
+    runs-on: ubuntu-latest
+    env:
+      COMPOSE: docker compose -f conformance/docker-compose.yml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      # Bring up MinIO + Postgres + the Mongo node with the SAME port mappings the conformance
+      # clients hardcode (5433 / 9100 / 27019) — exact parity with local dev, zero env wiring.
+      - name: Start services
+        run: $COMPOSE up -d
+
+      # Postgres: ready when it accepts connections.
+      - name: Wait for Postgres
+        run: |
+          until $COMPOSE exec -T postgres pg_isready -U postgres; do sleep 1; done
+
+      # MinIO: ready when its health endpoint answers on the mapped port.
+      - name: Wait for MinIO
+        run: |
+          until curl -fsS http://127.0.0.1:9100/minio/health/ready; do sleep 1; done
+
+      # Mongo is a single-node REPLICA SET (transactions need it — FOUNDATION §"Mongo atomicity").
+      # The set must be initiated once after start, then we wait for this node to win the election
+      # and become writable primary before any client connects.
+      - name: Initiate Mongo replica set
+        run: |
+          until $COMPOSE exec -T mongo mongosh --quiet --eval 'db.runCommand({ ping: 1 })'; do sleep 1; done
+          $COMPOSE exec -T mongo mongosh --quiet --eval 'try { rs.initiate() } catch (e) { print(e.codeName || e) }'
+          until $COMPOSE exec -T mongo mongosh --quiet --eval 'db.hello().isWritablePrimary' | grep -q true; do sleep 1; done
+
+      # The gate: clean build -> resolve adapters by package name -> run the suite against dist.
+      - name: Run conformance suite
+        run: pnpm test:conformance
+
+      # Always surface what the services logged when a run fails — the fastest way to tell a
+      # flaky-startup failure from a real conformance regression.
+      - name: Dump service logs on failure
+        if: failure()
+        run: $COMPOSE logs
+
+      - name: Tear down services
+        if: always()
+        run: $COMPOSE down -v

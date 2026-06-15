@@ -1,0 +1,39 @@
+# Fast tier — the gate that runs on EVERY push and PR. Lint, typecheck, build, and the
+# colocated unit suite (no real services, no Docker). The slow conformance tier lives in
+# conformance.yml and only fires on adapter/contract changes; this one is the cheap, always-on
+# feedback loop. (Two-tier split ruled in commit ae64d36 / CONFORMANCE.md.)
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same ref cancels the in-flight run — no point finishing CI for a commit
+# that's already been superseded.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint · typecheck · build · unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm -r build
+
+      - name: Unit tests
+        run: pnpm test
