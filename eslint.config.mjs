@@ -8,7 +8,8 @@ import globals from "globals";
 export default tseslint.config(
   // ref/ holds prior example libraries kept purely for illustration (git-ignored,
   // never shipped). It is not ours to lint — exclude it like build output.
-  { ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", "ref/**"] },
+  // website/ is the VitePress docs site — its own toolchain, not library source.
+  { ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", "ref/**", "website/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

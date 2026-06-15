@@ -1,0 +1,51 @@
+# Docs site — build the VitePress site and deploy it to GitHub Pages. Runs on merge to main
+# when the site (or this workflow) changes, plus manual dispatch. Reuses the Epic 5 setup
+# composite for the toolchain; the build stays out of the library's CI tiers (website has no
+# `build`/`typecheck` script, so `pnpm -r build` never touches it).
+#
+# One-time repo setting: Settings → Pages → Build and deployment → Source = "GitHub Actions".
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+# Pages deployment needs these; least-privilege otherwise.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; never cancel a publish mid-flight.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Build VitePress
+        run: pnpm --filter @hilaryosborne/sourcing-website docs:build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/.vitepress/dist
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

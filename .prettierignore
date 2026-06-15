@@ -10,3 +10,7 @@ PLAN.md
 DRAFT-AND-HALT.md
 TOOLING.md
 .claude/
+
+# VitePress generated output
+website/.vitepress/dist
+website/.vitepress/cache
