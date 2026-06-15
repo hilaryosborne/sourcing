@@ -1,12 +1,12 @@
-// DRAFT — Epic 4, Phase C (Postgres adapter — the easy backend, built RIGHT AFTER S3 on
-// purpose). The minimal Postgres surface the adapter needs, as an INJECTED port — the
-// concrete `pg` client is a Phase D wiring detail. Awaiting per-artefact ratification.
+// The minimal Postgres surface the adapter needs, as an INJECTED port — the concrete `pg`
+// client is supplied by the consumer. The Postgres adapter is the easy backend, built RIGHT
+// AFTER S3 on purpose.
 //
 // Postgres is the inverse stress test of S3: where S3 had to EMULATE every guarantee, here
 // they are native (unique constraints, UPDATE, cheap delta, cheap sequence). The risk flips
 // from "the port asks too much" to "the adapter does it the clean native way the port can't
-// promise across all three". So the discipline while drafting is: honor the SAME StorageI
-// contract S3 honors, and lean on NOTHING the universal port cannot assume.
+// promise across all three". So the discipline is: honor the SAME StorageI contract S3
+// honors, and lean on NOTHING the universal port cannot assume.
 export interface PgRows<R> {
   rows: R[];
   rowCount: number;

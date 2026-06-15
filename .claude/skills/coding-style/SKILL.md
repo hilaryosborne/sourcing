@@ -339,7 +339,7 @@ The house form for a code vocabulary is a **per-module `const enum` of stable
 `throw new Error(ProviderErrors.MISSING_API_KEY)`. One errors file per module.
 
 > For the *core library's* error contract — the exact type, codes, and where each is raised —
-> the shape is the Epic 3 gated decision (DRAFT-AND-HALT.md), not invented ad hoc. This skill
+> the shape is the Epic 3 gated decision (docs/internal/DRAFT-AND-HALT.md), not invented ad hoc. This skill
 > fixes the taste (minimal, tagged, mechanical-only).
 
 ## Observability

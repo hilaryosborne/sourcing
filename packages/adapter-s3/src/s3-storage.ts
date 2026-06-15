@@ -1,8 +1,8 @@
-// DRAFT — Epic 4, Phase C (S3 adapter). The StorageI implementation over an S3ClientPort —
-// the brutal adapter that proves the ratified port (FOUNDATION §"Storage adapter scope": if
-// it works on S3 it works anywhere). Awaiting per-artefact ratification of the load-bearing
-// shapes (etag-CAS append, overwrite-by-position) BEFORE the conformance suite locks the
-// contract. No real S3 client here — the port is injected.
+// The StorageI implementation over an S3ClientPort — the brutal adapter that proves the port
+// (FOUNDATION §"Storage adapter scope": if it works on S3 it works anywhere). The
+// load-bearing shapes (etag-CAS append, overwrite-by-position) are conformance-certified
+// against MinIO via the StorageI conformance suite. No real S3 client here — the port is
+// injected.
 //
 // ── BUCKET + DESTINATIONS ─────────────────────────────────────────────────────────────────
 // The BUCKET is store identity, fixed at construction (the S3 analogue of the Postgres
@@ -90,7 +90,7 @@ export const s3Storage = (s3: S3ClientPort, config: S3Config, destinations: Part
       return after === undefined ? events : events.filter((event) => event.position > after);
     },
 
-    // ── etag-CAS APPEND (flagged for ratification) ────────────────────────────────────────
+    // ── etag-CAS APPEND ───────────────────────────────────────────────────────────────────
     append: async (stream, events, expectedHead) => {
       if (events.length === 0) {
         // Empty append honors expectedHead (Reading B): the compare is a precondition asserted
@@ -123,7 +123,7 @@ export const s3Storage = (s3: S3ClientPort, config: S3Config, destinations: Part
       if (!written) throw new Error(StorageErrors.VERSION_CONFLICT);
     },
 
-    // ── OVERWRITE BY (stream, position) (flagged for ratification) ────────────────────────
+    // ── OVERWRITE BY (stream, position) ───────────────────────────────────────────────────
     // Read the one object, strip targeted positions in memory, write the whole object back
     // under If-Match. Position miss → OVERWRITE_UNKNOWN_POSITION (by position, never uid).
     // Concurrent forget: the second writer's etag is stale → rejected (VERSION_CONFLICT) →

@@ -7,7 +7,7 @@ description: >-
   mapping. Use when building the persistence layer and storage adapters (Epic 4, the
   Postgres/Mongo/S3 storage adapters), any consumer-swappable seam (logger, cache, store), or the
   published package surface. Assumes the `coding-style` foundation; this is the Mode-B recipe.
-  Storage interface shapes are governed by FOUNDATION.md and ratified via DRAFT-AND-HALT.md.
+  Storage interface shapes are governed by docs/internal/FOUNDATION.md and ratified via docs/internal/DRAFT-AND-HALT.md.
 ---
 
 # interface-adapters — building swappable contracts
@@ -47,7 +47,7 @@ them (registry, projection store, self-healing) can itself be functional. The de
 
 > Scope note: the **storage interface** all adapters implement — and the overwrite-in-place
 > operation right-to-forget needs — is drafted against Postgres/Mongo/S3 at once and ratified at
-> the Epic 4 gate (FOUNDATION.md, DRAFT-AND-HALT.md). This skill is the construction style, not
+> the Epic 4 gate (docs/internal/FOUNDATION.md, docs/internal/DRAFT-AND-HALT.md). This skill is the construction style, not
 > the ratified port.
 
 ---

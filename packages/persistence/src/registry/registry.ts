@@ -1,8 +1,6 @@
-// DRAFT — Epic 4, Phase B (implementation). THE AGGREGATE REGISTRY — the "aggregate id →
-// current head position" lookup of FOUNDATION §Scenario 2. A persistence-layer concept
-// (core never says the word "registry", §"The B ruling"), so it lives here, not in core.
-// Implementation drafted against the ratified Gate 2 contract; awaiting per-artefact
-// ratification (DRAFT-AND-HALT.md). Do not compose this into the repository until ratified.
+// THE AGGREGATE REGISTRY — the "aggregate id → current head position" lookup of FOUNDATION
+// §Scenario 2. A persistence-layer concept (core never says the word "registry", §"The B
+// ruling"), so it lives here, not in core.
 //
 // The registry is NOT a separately-written store. The head IS a property of the event
 // stream, so the registry is just `storage.head()` behind a named contract — one cheap

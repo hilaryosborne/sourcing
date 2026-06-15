@@ -1,14 +1,9 @@
-// DRAFT — Epic 4, Phase B (implementation). THE REPOSITORY — where core's pure aggregate +
-// projection builder are COMPOSED with a storage adapter. It owns the write path (create /
-// load / commit), the self-healing read path (rebuild), and right-to-forget (forget). It
-// depends on core; core never depends on it (FOUNDATION §"The B ruling"). The same core
-// aggregate + projection serve Scenario 1 (consumer fills the aggregate) and Scenario 2
-// (the repository fills it) — the repository cannot tell which scenario core is in, and
-// that is the point.
-//
-// Sub-artefact draft-and-halt (3a/3b/3c): the WRITE PATH (create/load/commit) is implemented
-// here; `rebuild` (three-outcome, slowed-down ruling) and `forget` (correctness, slowed-down
-// ruling) remain stubbed, each awaiting its OWN ratification — they are NOT batched.
+// THE REPOSITORY — where core's pure aggregate + projection builder are COMPOSED with a
+// storage adapter. It owns the write path (create / load / commit), the self-healing read
+// path (rebuild), and right-to-forget (forget). It depends on core; core never depends on it
+// (FOUNDATION §"The B ruling"). The same core aggregate + projection serve Scenario 1
+// (consumer fills the aggregate) and Scenario 2 (the repository fills it) — the repository
+// cannot tell which scenario core is in, and that is the point.
 import type {
   AggregateDefinition,
   AggregateInstance,
@@ -24,8 +19,8 @@ import { instrument, step, track } from "../observer/observe";
 import { RepositoryErrors } from "./repository.errors";
 
 // The repository composes ONE storage adapter; it derives the registry and projection store
-// from that adapter itself (‹DRAFT — auto-wiring, storage-session item›: the consumer wires
-// only `storage`). The standalone registry()/projectionStore() factories remain for testing.
+// from that adapter itself (auto-wiring: the consumer wires only `storage`). The standalone
+// registry()/projectionStore() factories remain for testing.
 //
 // `observer` is OPTIONAL observability (logging / error-reporting / profiling). When supplied,
 // the repository traces its 5 operations AND wraps the storage adapter so every port call is

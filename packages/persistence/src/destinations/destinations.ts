@@ -1,9 +1,8 @@
-// DRAFT — Epic 4, Phase C (configurable destinations). The §3 non-prohibition seam arriving
-// concrete: the consumer configures WHERE each kind of thing lands, at persistence-init. An
-// adapter interprets each name as a table / key-prefix / collection and uses it in place of
-// a hardcoded one. This is how a consumer points projections at a different store from
-// events WITHOUT the library solving spread (FOUNDATION §"Configurable destinations").
-// Awaiting per-artefact ratification (DRAFT-AND-HALT.md).
+// Configurable destinations — the §3 non-prohibition seam: the consumer configures WHERE each
+// kind of thing lands, at persistence-init. An adapter interprets each name as a table /
+// key-prefix / collection and uses it in place of a hardcoded one. This is how a consumer
+// points projections at a different store from events WITHOUT the library solving spread
+// (FOUNDATION §"Configurable destinations").
 //
 // THE RULE: the library targets ONE destination per operation and NEVER coordinates across
 // destinations — configurable, NOT coordinated. No operation (especially forget) is made

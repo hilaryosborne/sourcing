@@ -1,8 +1,6 @@
-// DRAFT — Epic 4, Phase B (implementation). THE PROJECTION STORE — load / save / delete a
-// projection with its bookmark (FOUNDATION §Scenario 2). A persistence-layer contract
-// composed on top of a storage adapter; core has no stored-projection concept. Implemented
-// against the ratified Gate 3 contract; awaiting per-artefact ratification (DRAFT-AND-HALT).
-// Do not compose this into the repository until ratified.
+// THE PROJECTION STORE — load / save / delete a projection with its bookmark (FOUNDATION
+// §Scenario 2). A persistence-layer contract composed on top of a storage adapter; core has
+// no stored-projection concept.
 //
 // A thin, intention-revealing wrapper over StorageProjectionsI: the store speaks in
 // (stream, name) and StoredProjection; the self-healing algorithm speaks to the store.

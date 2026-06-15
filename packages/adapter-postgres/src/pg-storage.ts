@@ -1,9 +1,8 @@
-// DRAFT — Epic 4, Phase C (Postgres adapter). The StorageI implementation over a
-// PgClientPort — the EASY backend, drafted right after S3 so the contrast is visible. It must
-// express the SAME contract S3 does; "native" must not change the port's shape or smuggle in
-// a capability the port now leans on. Awaiting per-artefact ratification of the two
-// load-bearing shapes (native-CAS append, UPDATE-by-(stream, position)) BEFORE Phase D's
-// conformance suite locks the contract across all three. No real `pg` here — port injected.
+// The StorageI implementation over a PgClientPort — the EASY backend, built right after S3 so
+// the contrast is visible, and conformance-certified against real Postgres. It expresses the
+// SAME contract S3 does; "native" does not change the port's shape or smuggle in a capability
+// the port now leans on. The two load-bearing shapes are native-CAS append and
+// UPDATE-by-(stream, position). No real `pg` here — port injected.
 //
 // DESTINATIONS: the consumer configures WHERE each kind lands at persistence-init; the
 // adapter uses the configured TABLE name in place of a hardcoded one (FOUNDATION

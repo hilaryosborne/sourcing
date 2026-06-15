@@ -1,5 +1,5 @@
 // The event envelope: the metadata that wraps every event, plus the value-object
-// schemas it composes. FOUNDATION.md §Events is the law for what lives here.
+// schemas it composes. docs/internal/FOUNDATION.md §Events is the law for what lives here.
 //
 // Payload note: the envelope types `payload` as `unknown` ON PURPOSE. The event
 // *definition* (event.ts) owns the payload schema and is "the only thing that

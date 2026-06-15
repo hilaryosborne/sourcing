@@ -1,9 +1,8 @@
-// DRAFT — Epic 4, Phase A (redraft). THE STORAGE INTERFACE — the seam every adapter
-// (Postgres, Mongo, S3) implements; the load-bearing contract of the whole storage story.
-// Drafted against all three reference adapters at once: if S3 can't honestly implement it,
-// it is wrong (FOUNDATION §"Storage adapter scope"). Shapes under review; awaiting
-// per-artefact ratification (DRAFT-AND-HALT.md). This file is interface ONLY — base +
-// concrete are Phase C, built per-backend after ratification.
+// THE STORAGE INTERFACE — the seam every adapter (Postgres, Mongo, S3) implements; the
+// load-bearing contract of the whole storage story. Designed against all three reference
+// adapters at once: if S3 can't honestly implement it, it is wrong (FOUNDATION §"Storage
+// adapter scope"). This file is the interface; the base + concrete adapters are built
+// per-backend.
 //
 // SPREAD-STORAGE CAVEAT (FOUNDATION / Hilary's ruling): a backend may be a single database,
 // duplicated, or one aggregate's data split across several stores/technologies. So the port

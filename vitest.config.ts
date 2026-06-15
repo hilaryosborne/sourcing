@@ -6,7 +6,8 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["packages/*/src/**/*.test.ts"],
-    // No tests yet — they land post-ratification in Epic 3/4 (DRAFT-AND-HALT.md).
+    // passWithNoTests so a freshly-scaffolded package doesn't fail the run before its
+    // tests land; the real-service conformance suites run from their own config.
     passWithNoTests: true,
     coverage: {
       provider: "v8",

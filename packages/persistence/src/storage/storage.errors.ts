@@ -1,7 +1,7 @@
-// DRAFT — Epic 4, Phase A (redraft). Mechanical-only error codes for the storage port.
-// Tagged codes a consumer can switch on, thrown as `new Error(StorageErrors.X)` — never
-// business judgement (interface-adapters §"Errors"). One const enum per module, matching
-// core's EventErrors/AggregateErrors convention. Awaiting per-artefact ratification.
+// Mechanical-only error codes for the storage port. Tagged codes a consumer can switch on,
+// thrown as `new Error(StorageErrors.X)` — never business judgement (interface-adapters
+// §"Errors"). One const enum per module, matching core's EventErrors/AggregateErrors
+// convention.
 // A regular `enum` (not `const enum`): these codes are switched on by ADAPTERS in other
 // packages, and a const enum cannot be consumed across a package boundary under
 // verbatimModuleSyntax. Same codes, same values — just runtime-accessible.

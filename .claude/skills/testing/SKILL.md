@@ -6,7 +6,7 @@ description: >-
   event-sourcing invariants worth proving. Use when writing tests, setting up test
   infrastructure, deciding test boundaries, or building a conformance suite for adapters.
   Assumes the `coding-style` foundation. Tests are part of done — but only AFTER the relevant
-  contract is ratified (Epic 3/4 gates, DRAFT-AND-HALT.md).
+  contract is ratified (Epic 3/4 gates, docs/internal/DRAFT-AND-HALT.md).
 ---
 
 # testing — create, test, prove

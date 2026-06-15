@@ -1,8 +1,7 @@
-// DRAFT — Epic 4, Phase C (S3 adapter, single-file layout). The minimal S3 surface the
-// adapter needs, as an INJECTED port — so the adapter's logic (single-file layout, etag-CAS,
-// overwrite-by-position) is testable against an in-memory fake and the concrete AWS/MinIO
-// client is a Phase D wiring detail (interface-adapters §"constructor DI"). Awaiting
-// per-artefact ratification (DRAFT-AND-HALT.md).
+// The minimal S3 surface the adapter needs, as an INJECTED port — so the adapter's logic
+// (single-file layout, etag-CAS, overwrite-by-position) is testable against an in-memory fake
+// and the concrete AWS/MinIO client is supplied by the consumer (interface-adapters
+// §"constructor DI"). Conformance-certified against MinIO.
 //
 // Every method maps to exactly ONE native S3 operation / precondition — nothing that needs a
 // feature S3 lacks. `bucket` is an explicit parameter: the port stays bucket-AGNOSTIC, and

@@ -1,10 +1,8 @@
-// DRAFT — Epic 4, Phase A (redraft). Public API surface for
-// @hilaryosborne/sourcing-persistence — the repository. The barrel IS the public API
-// (interface-adapters §"Barrels are the public API"): what is exported here is the
-// contract; anything not exported is internal. Awaiting per-artefact ratification
-// (DRAFT-AND-HALT.md). Nothing here is implemented — every factory throws.
+// Public API surface for @hilaryosborne/sourcing-persistence — the repository. The barrel IS
+// the public API (interface-adapters §"Barrels are the public API"): what is exported here is
+// the contract; anything not exported is internal.
 //
-// Four artefacts are on the table, each its own ratification gate:
+// Four artefacts make up this surface:
 //   1. the storage interface (the port every adapter implements)
 //   2. the aggregate registry contract
 //   3. the projection store contract

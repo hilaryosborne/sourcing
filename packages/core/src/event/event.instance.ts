@@ -1,7 +1,7 @@
 // The event instance — a STANDALONE, fluent builder (contract C, ratified). It is what
 // `EventDef.create(payload)` returns: the consumer decorates it with `.creator()` /
 // `.headers()`, then an aggregate stamps its position + reference via `stage()` when it is
-// added (FOUNDATION §Events; DOCS.md "standalone events"). The same instance type covers an
+// added (FOUNDATION §Events). The same instance type covers an
 // unstaged event (no position/aggregate yet), a staged event, and a rehydrated committed
 // event — they differ only in which fields are set.
 //

@@ -3,13 +3,10 @@ coverage
 pnpm-lock.yaml
 
 # Governing documents and skills are authored prose, not code — Prettier does
-# not reflow them. (CLAUDE.md, the model, the plan, the protocol, the skills.)
-CLAUDE.md
-FOUNDATION.md
-PLAN.md
-DRAFT-AND-HALT.md
-TOOLING.md
+# not reflow them. CLAUDE.md and the skills live under .claude/; the internal
+# build-process docs (the model, the plan, the protocol, the tooling) under docs/internal/.
 .claude/
+docs/internal/
 
 # VitePress generated output
 website/.vitepress/dist

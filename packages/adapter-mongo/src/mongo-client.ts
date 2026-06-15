@@ -1,6 +1,5 @@
-// DRAFT — Epic 4, Phase C (Mongo adapter — the interesting MIDDLE). The minimal Mongo
-// surface the adapter needs, as an INJECTED port — the concrete `mongodb` driver is a Phase D
-// wiring detail. Awaiting per-artefact ratification (DRAFT-AND-HALT.md).
+// The minimal Mongo surface the adapter needs (the interesting MIDDLE), as an INJECTED port —
+// the concrete `mongodb` driver is the consumer's to wire.
 //
 // Mongo sits between S3 and Postgres: a real conditional-update / unique-index story (not
 // S3-grim), but it LACKS single-statement multi-document atomicity (Postgres gets it from one

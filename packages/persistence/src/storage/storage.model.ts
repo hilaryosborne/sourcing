@@ -1,6 +1,5 @@
-// DRAFT — Epic 4, Phase A (redraft against the ratified core). The universal storage
-// models — the shared currency every adapter maps its backend's shape into (interface-
-// adapters §"Universal model"). Shapes under review; awaiting per-artefact ratification.
+// The universal storage models — the shared currency every adapter maps its backend's shape
+// into (interface-adapters §"Universal model").
 //
 // Two things get persisted: events and projections.
 //   - A stored event IS the core event envelope, verbatim. Storage adds nothing to it and

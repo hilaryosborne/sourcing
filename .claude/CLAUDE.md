@@ -20,10 +20,12 @@ This is not a suggestion. It is the operating mode. The interfaces *are* the dec
 
 ## What to read, and in what order
 
-1. **CLAUDE.md** (this file) — how to behave here.
-2. **FOUNDATION.md** — the conceptual model and the rulings that define the library. **This is the architecture. The sample code is not.**
-3. **DRAFT-AND-HALT.md** — the review protocol for design artefacts.
-4. **PLAN.md** — the epic-by-epic plan, dependencies, and gates.
+The build-process docs live under **`docs/internal/`** (relocated there so the public repo root stays consumer-facing — see `docs/internal/README.md`). This file lives at `.claude/CLAUDE.md` and is still auto-loaded.
+
+1. **`.claude/CLAUDE.md`** (this file) — how to behave here.
+2. **`docs/internal/FOUNDATION.md`** — the conceptual model and the rulings that define the library. **This is the architecture. The sample code is not.**
+3. **`docs/internal/DRAFT-AND-HALT.md`** — the review protocol for design artefacts.
+4. **`docs/internal/PLAN.md`** — the epic-by-epic plan, dependencies, and gates.
 
 ---
 

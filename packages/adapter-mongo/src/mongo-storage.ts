@@ -1,8 +1,6 @@
-// DRAFT — Epic 4, Phase C (Mongo adapter). The StorageI implementation over a MongoClientPort
-// — the interesting MIDDLE between S3 and Postgres. It must express the SAME contract both
-// extremes do. Awaiting per-artefact ratification of the two load-bearing shapes (concurrency,
-// overwrite-by-(stream, position)) BEFORE Phase D's conformance suite locks the contract. No
-// real `mongodb` here — the port is injected.
+// The StorageI implementation over a MongoClientPort — the interesting MIDDLE between S3 and
+// Postgres. It expresses the SAME contract both extremes do, and is conformance-certified
+// against a real Mongo replica set. No real `mongodb` here — the port is injected.
 //
 // MODEL: one document per event in the events collection, keyed by a UNIQUE INDEX on
 // (stream_name, stream_id, position) — that index is the compare-and-append (like Postgres's
@@ -11,7 +9,7 @@
 // overwrite are wrapped in a TRANSACTION for all-or-nothing. The port holds; the deployment
 // floor (replica set) is higher. (Alternative considered: whole-stream-in-one-document with a
 // conditional $push — atomic without transactions, but S3-like, no cheap delta, 16MB cap — the
-// S3 end, not the middle. Surfaced for the ratification of ①.)
+// S3 end, not the middle.)
 //
 // DESTINATIONS: collection-as-destination (events / projections), per-adapter name-validated.
 import type { EventEnvelopeV1Type } from "@hilaryosborne/sourcing";
@@ -74,7 +72,7 @@ export const mongoStorage = async (
       return docs.map((doc) => doc.envelope);
     },
 
-    // ── ① CONCURRENCY (flagged for ratification) ──────────────────────────────────────────
+    // ── ① CONCURRENCY ─────────────────────────────────────────────────────────────────────
     // The unique index (stream, position) is the compare-and-append. insertMany INSIDE a
     // transaction makes the multi-event commit ALL-OR-NOTHING (the document model's strain:
     // no single-statement multi-doc atomicity). A position already taken → duplicate key
@@ -111,7 +109,7 @@ export const mongoStorage = async (
       }
     },
 
-    // ── ② OVERWRITE BY (stream, position) (flagged for ratification) ──────────────────────
+    // ── ② OVERWRITE BY (stream, position) ─────────────────────────────────────────────────
     // Per-position updateOne INSIDE a transaction → ALL-OR-NOTHING: a miss (no doc matched)
     // throws → the transaction aborts → every redaction rolls back → OVERWRITE_UNKNOWN_POSITION
     // with the stream untouched (observably identical to S3 and Postgres). Matched by position,

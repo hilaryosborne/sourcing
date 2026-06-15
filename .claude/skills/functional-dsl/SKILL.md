@@ -7,7 +7,7 @@ description: >-
   topics/payloads, modelling a flow into atomic events, writing projection reducers, building
   a fluent builder/DSL, or splitting a DSL across files. Assumes the `coding-style`
   foundation; this is the Mode-A construction recipe. The exact core API is governed by
-  FOUNDATION.md and ratified via DRAFT-AND-HALT.md — this skill is style, not contract.
+  docs/internal/FOUNDATION.md and ratified via docs/internal/DRAFT-AND-HALT.md — this skill is style, not contract.
 ---
 
 # functional-dsl — building the domain core
@@ -16,7 +16,7 @@ This is **Mode A** from `coding-style` §5: the functional construction style fo
 mechanism — the aggregate, the facts, the folds. No classes, no `this`, no `new`. Closures over a
 `state` object, pure derivations, fluent DSLs that read like a story.
 
-> Scope note: FOUNDATION.md owns *what* the core is (events with strippers, the aggregate's
+> Scope note: docs/internal/FOUNDATION.md owns *what* the core is (events with strippers, the aggregate's
 > committed/staged split, the pure projection builder, zero storage). The shapes here are
 > *how we write it*, drafted and ratified at the Epic 3 gate. Don't treat the code sketches
 > as the ratified API.
@@ -139,7 +139,7 @@ Right-to-forget lives at the event layer (only the event understands its payload
 is a **pure function** registered by name that returns a redacted payload. Applying it yields
 **new event instances** preserving identity (id/position/topic/metadata) with the redacted
 payload — never a mutation in place, never an appended marker. The pass/fail test: no PII
-survives in the produced events. (Exact API: FOUNDATION.md + Epic 3 gate.)
+survives in the produced events. (Exact API: docs/internal/FOUNDATION.md + Epic 3 gate.)
 
 ---
 
