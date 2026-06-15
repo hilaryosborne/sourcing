@@ -1,0 +1,33 @@
+/* Brand palette — a calm teal-green ("event stream") with a warm amber accent. */
+:root {
+  --vp-c-brand-1: #2f8f74;
+  --vp-c-brand-2: #36a085;
+  --vp-c-brand-3: #3c8772;
+  --vp-c-brand-soft: rgba(60, 135, 114, 0.14);
+
+  /* Hero "sourcing" wordmark — a gradient that reads as state flowing through events. */
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #2f8f74 30%, #41b3a3 70%, #d8a657);
+
+  /* A soft glow behind the hero image/CTA area. */
+  --vp-home-hero-image-background-image: linear-gradient(45deg, rgba(60, 135, 114, 0.25), rgba(216, 166, 87, 0.2));
+  --vp-home-hero-image-filter: blur(48px);
+}
+
+.dark {
+  --vp-c-brand-1: #51c4a4;
+  --vp-c-brand-2: #41b3a3;
+  --vp-c-brand-3: #2f8f74;
+  --vp-c-brand-soft: rgba(81, 196, 164, 0.16);
+}
+
+/* Tighten the feature-card grid a touch and give cards a subtle lift on hover. */
+.VPFeature {
+  transition:
+    border-color 0.25s,
+    transform 0.25s;
+}
+.VPFeature:hover {
+  border-color: var(--vp-c-brand-1);
+  transform: translateY(-2px);
+}

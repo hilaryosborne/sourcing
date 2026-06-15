@@ -8,5 +8,6 @@ These are the **build-process documents**: the architecture-of-record and the wo
 | [PLAN.md](./PLAN.md) | The epic-by-epic build plan, dependencies, and gates. |
 | [DRAFT-AND-HALT.md](./DRAFT-AND-HALT.md) | The review protocol for design artefacts — design in drafts, halt, ratify, then build. |
 | [TOOLING.md](./TOOLING.md) | The ratified tooling and convention decisions (pnpm, tsup, Vitest, ESLint, Prettier, Changesets). |
+| [REFINEMENTS.md](./REFINEMENTS.md) | The adoption-readiness backlog — the tech-lead questions for production use, with gaps and directions, prioritised. |
 
 The agent operating manual for this repository is [`.claude/CLAUDE.md`](../../.claude/CLAUDE.md); the development style skills are under [`.claude/skills/`](../../.claude/skills/).
