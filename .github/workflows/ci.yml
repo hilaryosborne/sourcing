@@ -29,11 +29,15 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Typecheck
-        run: pnpm typecheck
-
+      # Build MUST precede typecheck and tests: a package resolves a sibling
+      # (`@hilaryosborne/sourcing` etc.) through the workspace symlink to its BUILT
+      # `dist/*.d.ts`, so `tsc --noEmit` and Vitest can't see cross-package types until
+      # `dist` exists. (typecheck doesn't emit, so it can't produce them itself.)
       - name: Build
         run: pnpm -r build
+
+      - name: Typecheck
+        run: pnpm typecheck
 
       - name: Unit tests
         run: pnpm test
