@@ -11,3 +11,5 @@ docs/internal/
 # VitePress generated output
 website/.vitepress/dist
 website/.vitepress/cache
+
+website/public/skills

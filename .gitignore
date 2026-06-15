@@ -27,3 +27,6 @@ coverage/
 # VitePress docs site — generated output and cache
 website/.vitepress/dist/
 website/.vitepress/cache/
+
+# Generated: skills synced into the site from docs/skills/ at build time
+website/public/skills/

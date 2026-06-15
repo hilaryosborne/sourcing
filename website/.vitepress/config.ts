@@ -16,6 +16,7 @@ export default defineConfig({
       { text: "Guide", link: "/guide/getting-started" },
       { text: "Concepts", link: "/concepts" },
       { text: "Examples", link: "/examples" },
+      { text: "🤖 AI Skills", link: "/skills" },
       { text: "FAQ", link: "/faq" },
       { text: "GitHub", link: "https://github.com/hilaryosborne/sourcing" },
     ],
@@ -53,6 +54,10 @@ export default defineConfig({
           { text: "🗑️ Right-to-forget", link: "/examples/gdpr-erasure" },
           { text: "🐘 Self-healing (Postgres)", link: "/examples/self-healing-postgres" },
         ],
+      },
+      {
+        text: "For AI assistants",
+        items: [{ text: "🤖 Skills & llms.txt", link: "/skills" }],
       },
       {
         text: "Reference",
