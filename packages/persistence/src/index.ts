@@ -32,3 +32,23 @@ export type { ProjectionStoreI } from "./projection-store/projection-store";
 export { default as repository } from "./repository/repository";
 export type { RepositoryI, RepositoryDeps, RebuildInput, ForgetInput } from "./repository/repository";
 export { RepositoryErrors } from "./repository/repository.errors";
+
+// --- Observability (the optional logging / error-reporting / profiling seam) ---
+// The Observer interface is the product: implement it for Splunk / New Relic / OTel / etc.
+// `consoleObserver` is the batteries-included default. `instrument`/`track` are internal.
+export { consoleObserver } from "./observer/observer.console";
+export type { ConsoleObserverOptions } from "./observer/observer.console";
+export type {
+  Observer,
+  Logger,
+  ErrorReport,
+  HookEvent,
+  HookPre,
+  HookProgress,
+  HookSuccess,
+  HookFailure,
+  ObservedOp,
+  ObserverPhase,
+  ObserverLevel,
+  ObserverData,
+} from "./observer/observer.interface";

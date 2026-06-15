@@ -191,6 +191,41 @@ Know the S3 trade-offs (structural, by design): **unbounded object growth** (eve
 | `StorageErrors.APPEND_NOT_CONTIGUOUS`       | Appended events aren't `expectedHead + 1…` — a caller sequencing bug, not a race.            |
 | `RepositoryErrors.PROJECTION_AHEAD_OF_HEAD` | A stored projection's bookmark sits past a reachable head — refuses to heal over corruption. |
 
+## Observability (the `observer` seam)
+
+`repository({ storage })` is silent by default. Pass an optional `observer` to wire logging, error reporting, and profiling into your platform. It is one interface with three independent channels — implement only what you need:
+
+| Channel  | Shape                                 | Maps to                    |
+| -------- | ------------------------------------- | -------------------------- |
+| `logger` | `error/warn/info/debug(event, data?)` | Splunk (structured logs)   |
+| `report` | `(report: ErrorReport) => …`          | New Relic (error tracking) |
+| `hook`   | `(event: HookEvent) => …`             | metrics / OTel (profiling) |
+
+```ts
+import { repository, consoleObserver } from "@hilaryosborne/sourcing-persistence";
+
+const repo = repository({
+  storage,
+  observer: {
+    logger: { info: splunk.send, warn: splunk.send, error: splunk.send, debug: splunk.send },
+    report: (r) => newrelic.noticeError(r.error, { op: r.op, code: r.code, stream: r.stream?.id }),
+    hook: (e) => {
+      if (e.phase === "success") metrics.timing(e.code, e.durationMs);
+    },
+  },
+});
+// or the batteries-included default: observer: consoleObserver()  (quiet — failures only)
+//                                    observer: consoleObserver({ level: "debug" })  (full trace)
+```
+
+What fires: every repository operation (`create/load/commit/rebuild/forget`) and every storage port call it makes (`head/read/append/overwrite/loadProjection/saveProjection/deleteProjections`) emits a hook lifecycle — `pre` → `success | failure` with a measured `durationMs`, plus `progress` steps for the multi-step ops. `rebuild`'s progress step is its self-healing path (`no_stored` / `stale` / `current`) — that's your projection cache-hit ratio. The `HookEvent` is a discriminated union over `op` × `phase`; switch on it.
+
+Three rules to rely on:
+
+- **Async-safe, non-blocking.** Every method may return a Promise. The library never awaits your observer and swallows any throw/rejection — a slow or broken sink (Splunk down, NR agent stalling) can neither slow nor break a storage op. Need delivery guarantees? Buffer inside your plugin.
+- **Observation only.** Hooks are passive (WordPress _actions_, not _filters_) — nothing they return changes library behaviour. To change behaviour, write an adapter, not an observer.
+- **Metadata only, by type.** Hook/log data is `Record<string, string | number | boolean>` — you _cannot_ nest an event payload. This is structural, not a convention: an observer that emitted payloads would leak PII into telemetry and defeat right-to-forget. Adapters are never modified — observation happens at the repository's port boundary.
+
 ## Gotchas
 
 - **Catch `VERSION_CONFLICT` and retry** the load→stage→commit cycle — it's the normal signal that someone committed first.

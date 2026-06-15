@@ -17,15 +17,23 @@ import type {
 } from "@hilaryosborne/sourcing";
 import type { StorageI } from "../storage/storage.interface";
 import type { StorageStream } from "../storage/storage.model";
+import type { Observer } from "../observer/observer.interface";
 import { registry } from "../registry/registry";
 import { projectionStore } from "../projection-store/projection-store";
+import { instrument, step, track } from "../observer/observe";
 import { RepositoryErrors } from "./repository.errors";
 
 // The repository composes ONE storage adapter; it derives the registry and projection store
 // from that adapter itself (‹DRAFT — auto-wiring, storage-session item›: the consumer wires
 // only `storage`). The standalone registry()/projectionStore() factories remain for testing.
+//
+// `observer` is OPTIONAL observability (logging / error-reporting / profiling). When supplied,
+// the repository traces its 5 operations AND wraps the storage adapter so every port call is
+// observed at the same boundary — adapters stay non-invasive. When omitted, nothing is wrapped
+// and nothing is emitted (the quiet default costs nothing). See observer/observer.interface.ts.
 export interface RepositoryDeps {
   storage: StorageI;
+  observer?: Observer;
 }
 
 // What rebuild needs to heal one projection of one aggregate instance. The projection's
@@ -130,7 +138,11 @@ const committedHead = (aggregate: AggregateInstance): number | undefined => {
 // repository({ storage }) — compose a storage adapter into the repository, deriving the
 // registry + projection store from it (the consumer wires only `storage`).
 export const repository = (deps: RepositoryDeps): RepositoryI => {
-  const { storage } = deps;
+  const { observer } = deps;
+  // When an observer is wired, work through an INSTRUMENTED view of the adapter so every port
+  // call — including the registry's head read and the projection store's load/save/delete — is
+  // observed at this one boundary. No observer → the raw adapter, no wrapping, no overhead.
+  const storage = observer ? instrument(deps.storage, observer) : deps.storage;
   // Auto-wired collaborators (the ratified registry + projectionStore, bound to this one
   // adapter). Held for the read path + forget; the write path talks to storage directly.
   const reg = registry(storage);
@@ -142,106 +154,126 @@ export const repository = (deps: RepositoryDeps): RepositoryI => {
     // Mint a fresh, empty aggregate. The id is core-minted (definition.instance() → nanoid);
     // async leaves room for an adapter that derives/reserves ids, but the default touches no
     // storage. Nothing is persisted until commit().
-    create: async (definition) => definition.instance(),
+    create: (definition) =>
+      track(
+        observer,
+        "create",
+        undefined,
+        async () => definition.instance(),
+        (instance) => ({
+          stream: instance.id,
+          aggregate: instance.name,
+        }),
+      ),
 
     // Hydrate an existing aggregate: read its full stream and import it into a fresh
     // instance's `committed`, returning it ready for further staging.
-    load: async (definition, id) => {
-      const instance = definition.instance(id);
-      const events = await storage.read(streamOf(id, definition.name));
-      instance.events.import(events);
-      return instance;
-    },
+    load: (definition, id) =>
+      track(observer, "load", streamOf(id, definition.name), async () => {
+        const instance = definition.instance(id);
+        const events = await storage.read(streamOf(id, definition.name));
+        instance.events.import(events);
+        return instance;
+      }),
 
     // Persist the aggregate's STAGED events and advance the head, then fold staged →
     // committed in memory and return the instance. A no-op for an aggregate with nothing
     // staged. `expectedHead` is the loaded committed head — VERSION_CONFLICT on mismatch
     // (optimistic concurrency against THIS adapter's head).
-    commit: async (aggregate) => {
-      const staged = aggregate.events.staged;
-      if (staged.length === 0) return aggregate;
-      const stream = streamOf(aggregate.id, aggregate.name);
-      const envelopes: EventEnvelopeV1Type[] = staged.map((event) => event.build());
-      await storage.append(stream, envelopes, committedHead(aggregate));
-      aggregate.events.commit();
-      return aggregate;
-    },
+    commit: (aggregate) =>
+      track(observer, "commit", streamOf(aggregate.id, aggregate.name), async () => {
+        const staged = aggregate.events.staged;
+        if (staged.length === 0) return aggregate;
+        const stream = streamOf(aggregate.id, aggregate.name);
+        const envelopes: EventEnvelopeV1Type[] = staged.map((event) => event.build());
+        await storage.append(stream, envelopes, committedHead(aggregate));
+        aggregate.events.commit();
+        return aggregate;
+      }),
 
     // --- Read path (3b): self-healing rebuild, the three-outcome logic ------------------
-    rebuild: async (input) => {
-      const { aggregate, id, projection } = input;
-      const stream = streamOf(id, aggregate.name);
+    rebuild: (input) =>
+      track(observer, "rebuild", streamOf(input.id, input.aggregate.name), async () => {
+        const { aggregate, id, projection } = input;
+        const stream = streamOf(id, aggregate.name);
 
-      // Step 1 — load the stored projection (carries its bookmark), or none.
-      const stored = await projections.load(stream, projection.name);
-      // Step 2 — ONE cheap registry read for the stream's current head.
-      const head = await reg.head(stream);
+        // Step 1 — load the stored projection (carries its bookmark), or none.
+        const stored = await projections.load(stream, projection.name);
+        // Step 2 — ONE cheap registry read for the stream's current head.
+        const head = await reg.head(stream);
 
-      // Corruption guard — NOT one of the three outcomes. A stored bookmark at or past a head
-      // the stream cannot reach means the projection claims to have folded events that do not
-      // exist (head behind bookmark, or no head at all under a stored projection). Refuse,
-      // rather than silently rebuild over a corrupt bookmark (FOUNDATION §"Forget is not
-      // atomic" records the related convergence obligation).
-      if (stored && (head === undefined || head < stored.position)) {
-        throw new Error(RepositoryErrors.PROJECTION_AHEAD_OF_HEAD);
-      }
+        // Corruption guard — NOT one of the three outcomes. A stored bookmark at or past a head
+        // the stream cannot reach means the projection claims to have folded events that do not
+        // exist (head behind bookmark, or no head at all under a stored projection). Refuse,
+        // rather than silently rebuild over a corrupt bookmark (FOUNDATION §"Forget is not
+        // atomic" records the related convergence obligation).
+        if (stored && (head === undefined || head < stored.position)) {
+          throw new Error(RepositoryErrors.PROJECTION_AHEAD_OF_HEAD);
+        }
 
-      // Outcome CURRENT — head === bookmark: nothing new since the projection was built.
-      // Return the stored state as-is, lifted from `unknown` via the projection's own schema.
-      // NO event fetch — the cheap win.
-      if (stored && head === stored.position) {
-        return projection.schema.parse(stored.state);
-      }
+        // Outcome CURRENT — head === bookmark: nothing new since the projection was built.
+        // Return the stored state as-is, lifted from `unknown` via the projection's own schema.
+        // NO event fetch — the cheap win. The progress step is the cache-hit signal.
+        if (stored && head === stored.position) {
+          step(observer, "rebuild", stream, "current");
+          return projection.schema.parse(stored.state);
+        }
 
-      // Outcomes NO-STORED (full build) and STALE (delta fold) share ONE core build — the
-      // only differences are the read window and whether there is a seed:
-      //   • NO-STORED → read the FULL stream (after = undefined), no seed → fold from the
-      //     first event.
-      //   • STALE     → read ONLY the delta (after = bookmark), seed = stored state → the
-      //     seeded fold applies the delta on top of the stored state.
-      // Core cannot tell which outcome it is serving: it is the SAME aggregate.instance +
-      // projection.build in both — Scenario 1 (consumer-filled) and Scenario 2 (repository-
-      // filled) are indistinguishable to core. The only difference is who filled the
-      // aggregate. That is the B-ruling proof, made concrete.
-      const seed = stored ? projection.schema.parse(stored.state) : undefined;
-      const events = await storage.read(stream, stored?.position);
-      const instance = aggregate.instance(id);
-      instance.events.import(events);
-      const state = projection.build(instance, seed);
+        // Outcomes NO-STORED (full build) and STALE (delta fold) share ONE core build — the
+        // only differences are the read window and whether there is a seed:
+        //   • NO-STORED → read the FULL stream (after = undefined), no seed → fold from the
+        //     first event.
+        //   • STALE     → read ONLY the delta (after = bookmark), seed = stored state → the
+        //     seeded fold applies the delta on top of the stored state.
+        // Core cannot tell which outcome it is serving: it is the SAME aggregate.instance +
+        // projection.build in both — Scenario 1 (consumer-filled) and Scenario 2 (repository-
+        // filled) are indistinguishable to core. The only difference is who filled the
+        // aggregate. That is the B-ruling proof, made concrete.
+        step(observer, "rebuild", stream, stored ? "stale" : "no_stored");
+        const seed = stored ? projection.schema.parse(stored.state) : undefined;
+        const events = await storage.read(stream, stored?.position);
+        const instance = aggregate.instance(id);
+        instance.events.import(events);
+        const state = projection.build(instance, seed);
 
-      // Bookmark = the head we actually folded up to (the imported events' max position).
-      // A successful build means ≥1 event folded, so this is defined; the `?? 0` branch is
-      // unreachable (an empty fold fails the projection's shape validation first).
-      const bookmark = instance.position ?? 0;
-      await projections.save({ aggregate: stream, name: projection.name, position: bookmark, state });
-      return state;
-    },
+        // Bookmark = the head we actually folded up to (the imported events' max position).
+        // A successful build means ≥1 event folded, so this is defined; the `?? 0` branch is
+        // unreachable (an empty fold fails the projection's shape validation first).
+        const bookmark = instance.position ?? 0;
+        await projections.save({ aggregate: stream, name: projection.name, position: bookmark, state });
+        return state;
+      }),
 
     // --- Right-to-forget (3c): erasure with end-to-end correctness ----------------------
-    forget: async (input) => {
-      const { aggregate, id, context } = input;
-      const stream = streamOf(id, aggregate.name);
+    forget: (input) =>
+      track(observer, "forget", streamOf(input.id, input.aggregate.name), async () => {
+        const { aggregate, id, context } = input;
+        const stream = streamOf(id, aggregate.name);
 
-      // 1. Load the FULL stream into an aggregate.
-      const instance = aggregate.instance(id);
-      instance.events.import(await storage.read(stream));
+        // 1. Load the FULL stream into an aggregate.
+        const instance = aggregate.instance(id);
+        instance.events.import(await storage.read(stream));
+        step(observer, "forget", stream, "loaded");
 
-      // 2. strip(context) — core forks a NEW aggregate with redacted events: same id /
-      //    position / topic / metadata, redacted payload, nothing mutated in place. Core
-      //    produces the stripped events; it does NOT persist them (that is this layer's job).
-      const redacted = instance.strip(context);
+        // 2. strip(context) — core forks a NEW aggregate with redacted events: same id /
+        //    position / topic / metadata, redacted payload, nothing mutated in place. Core
+        //    produces the stripped events; it does NOT persist them (that is this layer's job).
+        const redacted = instance.strip(context);
+        step(observer, "forget", stream, "stripped");
 
-      // 3. Overwrite the events in place — keyed (stream, position), the one sanctioned
-      //    exception to append-only. The source of truth is now PII-free.
-      await storage.overwrite(stream, redacted.events.export());
+        // 3. Overwrite the events in place — keyed (stream, position), the one sanctioned
+        //    exception to append-only. The source of truth is now PII-free.
+        await storage.overwrite(stream, redacted.events.export());
+        step(observer, "forget", stream, "overwritten");
 
-      // 4. Bin EVERY projection for the stream — the DELEGATED adapter capability (not a
-      //    repository-level prefix scan). Because overwrite does not move the head, a
-      //    "current" projection would otherwise be served from cache and mask the erasure;
-      //    binning forces the next rebuild down the clean full-build path. Lazy heal: the
-      //    read side is left EMPTY until the next rebuild rebuilds it from the redacted events.
-      await projections.delete(stream);
-    },
+        // 4. Bin EVERY projection for the stream — the DELEGATED adapter capability (not a
+        //    repository-level prefix scan). Because overwrite does not move the head, a
+        //    "current" projection would otherwise be served from cache and mask the erasure;
+        //    binning forces the next rebuild down the clean full-build path. Lazy heal: the
+        //    read side is left EMPTY until the next rebuild rebuilds it from the redacted events.
+        await projections.delete(stream);
+        step(observer, "forget", stream, "binned");
+      }),
   };
   return repo;
 };
