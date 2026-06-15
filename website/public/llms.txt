@@ -1,0 +1,40 @@
+# sourcing
+
+> A domain-agnostic TypeScript event-sourcing library. Define events, hold them in aggregates, and fold them into read models — with no business-rule layer and no storage opinion in the core. "Mechanism, not judgment": the library answers "what would the state be?" and you decide what's allowed in your own code. Core depends only on Zod and nanoid; persistence and storage adapters (Postgres, Mongo, S3) are optional, separate packages.
+
+## Start here
+
+- [Why event sourcing?](https://hilaryosborne.github.io/sourcing/guide/what-is-sourcing): the problem, our mechanism-not-judgment take, the catch, and when not to use it.
+- [Getting started](https://hilaryosborne.github.io/sourcing/guide/getting-started): install and build your first projection in 60 seconds (core only, no database).
+- [The three scenarios](https://hilaryosborne.github.io/sourcing/guide/scenarios): projections on demand, staged validation, and persisted self-healing read models.
+- [The mental model](https://hilaryosborne.github.io/sourcing/concepts): the three nouns — aggregate, repository, storage adapter — and the committed/staged split.
+
+## Guides
+
+- [Events](https://hilaryosborne.github.io/sourcing/guide/events): the `event(topic, schema)` factory, the fluent instance builder, strippers, and the mechanical errors.
+- [Aggregates](https://hilaryosborne.github.io/sourcing/guide/aggregates): registering events, staging, the committed/staged split, and staged validation.
+- [Projections](https://hilaryosborne.github.io/sourcing/guide/projections): the typed builder, the first-event-establishes-the-shape contract, and `build(aggregate, from?)`.
+- [Storage adapters](https://hilaryosborne.github.io/sourcing/guide/storage-adapters): wiring Postgres/Mongo/S3 via client ports, configurable destinations, and the preconditions.
+- [Right-to-forget](https://hilaryosborne.github.io/sourcing/guide/right-to-forget): GDPR erasure via in-place stripping, and why observability can't leak the PII back.
+- [Observability](https://hilaryosborne.github.io/sourcing/guide/observability): the optional observer — logging (Splunk), error reporting (New Relic), and profiling — async-safe and metadata-only.
+
+## Examples
+
+- [Shopping cart](https://hilaryosborne.github.io/sourcing/examples/shopping-cart): staged validation — preview a checkout and reject it in your own code.
+- [Order fulfillment](https://hilaryosborne.github.io/sourcing/examples/order-fulfillment): a lifecycle as an event stream, with a "can't ship unpaid" guard.
+- [Document lifecycle](https://hilaryosborne.github.io/sourcing/examples/document-lifecycle): two read models (summary + access-control list) from one stream.
+- [Right-to-forget](https://hilaryosborne.github.io/sourcing/examples/gdpr-erasure): GDPR erasure end to end, with proof no PII survives.
+- [Self-healing on Postgres](https://hilaryosborne.github.io/sourcing/examples/self-healing-postgres): persistence, the three self-healing paths, conflict retries, and observability.
+
+## Skills (for AI assistants)
+
+- [Concepts skill](https://hilaryosborne.github.io/sourcing/skills/sourcing-concepts.md): the mental model, packaged for an assistant.
+- [Events skill](https://hilaryosborne.github.io/sourcing/skills/using-events.md): defining and using events.
+- [Aggregates skill](https://hilaryosborne.github.io/sourcing/skills/using-aggregates.md): defining and driving aggregates.
+- [Projections skill](https://hilaryosborne.github.io/sourcing/skills/using-projections.md): building read models.
+- [Storage adapters skill](https://hilaryosborne.github.io/sourcing/skills/using-storage-adapters.md): wiring the repository and a backend.
+
+## Reference
+
+- [FAQ & edge cases](https://hilaryosborne.github.io/sourcing/faq): do I need event sourcing, CQRS, versioning, concurrency, GDPR cost, performance, and the gotchas.
+- [GitHub repository](https://github.com/hilaryosborne/sourcing): source, issues, and the packages.

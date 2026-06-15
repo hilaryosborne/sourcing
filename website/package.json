@@ -5,8 +5,8 @@
   "description": "The documentation site for @hilaryosborne/sourcing (VitePress, deployed to GitHub Pages).",
   "type": "module",
   "scripts": {
-    "docs:dev": "vitepress dev",
-    "docs:build": "vitepress build",
+    "docs:dev": "node scripts/sync-skills.mjs && vitepress dev",
+    "docs:build": "node scripts/sync-skills.mjs && vitepress build",
     "docs:preview": "vitepress preview"
   },
   "devDependencies": {
