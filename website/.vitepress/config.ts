@@ -15,6 +15,7 @@ export default defineConfig({
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
       { text: "Concepts", link: "/concepts" },
+      { text: "Examples", link: "/examples" },
       { text: "FAQ", link: "/faq" },
       { text: "GitHub", link: "https://github.com/hilaryosborne/sourcing" },
     ],
@@ -22,7 +23,7 @@ export default defineConfig({
       {
         text: "Introduction",
         items: [
-          { text: "What is sourcing?", link: "/guide/what-is-sourcing" },
+          { text: "Why event sourcing?", link: "/guide/what-is-sourcing" },
           { text: "Getting started", link: "/guide/getting-started" },
           { text: "The three scenarios", link: "/guide/scenarios" },
         ],
@@ -40,6 +41,17 @@ export default defineConfig({
           { text: "Storage adapters", link: "/guide/storage-adapters" },
           { text: "Right-to-forget", link: "/guide/right-to-forget" },
           { text: "Observability", link: "/guide/observability" },
+        ],
+      },
+      {
+        text: "Examples",
+        items: [
+          { text: "🧪 Overview", link: "/examples" },
+          { text: "🛒 Shopping cart", link: "/examples/shopping-cart" },
+          { text: "📦 Order fulfillment", link: "/examples/order-fulfillment" },
+          { text: "📄 Document lifecycle", link: "/examples/document-lifecycle" },
+          { text: "🗑️ Right-to-forget", link: "/examples/gdpr-erasure" },
+          { text: "🐘 Self-healing (Postgres)", link: "/examples/self-healing-postgres" },
         ],
       },
       {

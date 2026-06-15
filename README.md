@@ -1,6 +1,10 @@
 # sourcing
 
+[![Docs](https://img.shields.io/badge/docs-hilaryosborne.github.io%2Fsourcing-3c8772?style=flat-square)](https://hilaryosborne.github.io/sourcing/) [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](#license) [![Types: TypeScript](https://img.shields.io/badge/types-TypeScript-3178c6?style=flat-square)](https://www.typescriptlang.org/) [![Core deps: 2](https://img.shields.io/badge/core%20deps-zod%20%2B%20nanoid-success?style=flat-square)](#packages)
+
 **An event sourcing library that records facts and derives state from them — and refuses to do anything else.** No business rules, no command layer, no opinion about where your data lives. You define events, fold them into read models, and decide what's allowed in your own code. The library never decides for you.
+
+> 📖 **Full documentation, guides, and worked examples → [hilaryosborne.github.io/sourcing](https://hilaryosborne.github.io/sourcing/)**
 
 ```ts
 // an event is a topic + a typed payload
