@@ -1,13 +1,11 @@
-# DOCS.md — Using the library (developer birds-eye view)
-
-> **Status: working draft.** This document exists to check that the design is coming
-> together the way we want — a single place to _see_ the consumer experience across
-> every scenario before the implementation is built. Some shapes shown here are still
-> awaiting ratification; those are listed under **Design status** at the end. Where an
-> example depends on an un-ratified shape, it is marked `‹draft›`.
+# DOCS.md — Using the library (one worked domain, all three scenarios)
 
 This is the consumer's view: how an application _uses_ the library, not how it is built
-internally. It is organised around the three scenarios in FOUNDATION.md.
+internally. It carries **one domain across all three scenarios** from FOUNDATION.md, end to
+end. For the _why_ behind the shapes, read the [**concepts skill**](docs/skills/sourcing-concepts/SKILL.md)
+first; for a fast start, the [**README**](README.md); for per-part how-to, the component
+skills under [`docs/skills/`](docs/skills/). Every shape below is implemented, tested, and
+proven against real services.
 
 ---
 
@@ -193,12 +191,12 @@ from an adapter; the registry and projection store are its internal collaborator
 
 ```ts
 import { repository } from "@hilaryosborne/sourcing-persistence";
-import { mongoStorage } from "@hilaryosborne/sourcing-adapter-mongo";
+import { postgresStorage } from "@hilaryosborne/sourcing-adapter-postgres";
 
-const storage = mongoStorage({
-  /* connection */
-});
-const repo = repository({ storage }); // ‹draft› auto-wires registry + projection store
+// Adapters take a thin CLIENT PORT over your real driver, plus optional destinations.
+// See the using-storage-adapters skill for the full pgClient/mongoClient/s3Client wiring.
+const storage = await postgresStorage(pgClient, { events: "account_events", projections: "account_projections" });
+const repo = repository({ storage }); // auto-wires the registry + projection store from the one adapter
 ```
 
 ### Write path — build events, let the repository persist them
@@ -288,17 +286,19 @@ emit your own event — that's a business concern.
 
 ## Storage is swappable — and may be spread
 
-Every adapter implements one storage interface (`StorageI`). Swapping adapters is a one-line
-change:
+Every adapter implements one storage interface (`StorageI`). Swapping backends is changing one
+import and one factory call — the rest of your code is untouched:
 
 ```ts
-import { postgresStorage } from "@hilaryosborne/sourcing-adapter-postgres";
-const repo = repository({
-  storage: postgresStorage({
-    /* connection */
-  }),
-});
+import { mongoStorage } from "@hilaryosborne/sourcing-adapter-mongo";
+const storage = await mongoStorage(mongoClient, { events: "account_events", projections: "account_projections" });
+const repo = repository({ storage });
 ```
+
+Each adapter is wired by injecting a small **client port** over your driver (`pg`, `mongodb`,
+`@aws-sdk/client-s3`) — the [**using-storage-adapters skill**](docs/skills/using-storage-adapters/SKILL.md)
+gives the exact port for each, plus the operational preconditions (Mongo needs a replica set;
+the `(stream, position)` unique index is the compare-and-append).
 
 Storage can be anything: a single database, duplicated stores, or one aggregate's data spread
 across several databases/technologies, routed however the adapter likes. The repository and
@@ -308,46 +308,17 @@ whichever object holds the event).
 
 ---
 
-## Design status — what these examples assume
+## Where to go next
 
-**Stable (core, unaffected by this round):**
+Every shape on this page is implemented, tested, and proven — core (Epic 3) against its unit
+suite, the repository and all three adapters (Epic 4) against **real Postgres, a Mongo replica
+set, and MinIO** via a shared conformance suite run in CI.
 
-- `event(topic, schema)` definition factory + `.strip(context, fn)`
-- `nanoid` re-exported from core for consumer convenience (minting payload uids)
-
-**Ratified and built (Epic 3 core — implemented, tested, and proven):**
-
-- **A. Aggregate construction.** `aggregate(name)` + `.register(eventDef)` per event.
-- **B. Projection construction + handlers.** `projection(name, model)` + `.aggregate(def)` +
-  `.handle(eventDef, (current, event) => next)`. Typed `event.payload`; the name is the
-  projection's identity in the projection store. **Build is the single call
-  `build(aggregate, from?)`** — fold the aggregate over an optional resume seed; the
-  two-step `create(seed).build()` was dropped as ceremony.
-- **C. Standalone events + fluent builder.** `EventDef.create(payload).creator(entity, uid).headers(h)`,
-  added via `account.events.add(builder)`. Events aren't bound to one aggregate; `creator`
-  still required (no default).
-- **D. Aggregate runtime surface.** Identity as properties (`id` / `name` / `position`);
-  event ops under `account.events` (`add` / `import` / `export` / `commit` / `committed` /
-  `staged`); `account.strip(context)` forks a redacted aggregate.
-- **First-event-seeds-the-shape contract** (consequence of B): no `initial` in the
-  definition; the creating handler establishes the base; a first event that doesn't produce
-  a valid base fails validation, by design. Documented in the projection section above.
-- **Id minting defaults to core** (a nanoid, like events); `Account.instance(id)` accepts an
-  explicit id; a storage adapter _may_ override, but that is the special case, not the default.
-- **`repo.forget(...)` is a first-class repository method** — the repository owns the
-  load → strip → overwrite → rebuild mechanism; the app owns the decision.
-
-**Still `‹draft›` — open, to be ratified later (all Epic 4 / storage-session):**
-
-1. **`repository({ storage })` auto-wiring.** Deriving the registry + projection store from
-   one adapter (consumer wires only `storage`). Good idea; ratify with the storage session.
-2. **Event uid as the overwrite key.** Envelope already carries an intrinsic `id` (nanoid).
-   `id` vs `(stream, position)` as the `overwrite` match key — **deferred to the dedicated
-   storage-interface session** (ties to spread storage).
-3. **Optimistic concurrency.** Whether an expected-head guard on `commit` is part of the
-   **shared** storage port or an **optional** capability — **deferred to the dedicated
-   storage-interface session** (spread storage may have no single authoritative head).
-
-> Persistence-layer specifics (the `repository` surface, the storage interface, the registry
-> and projection-store contracts) are **Epic 4** artefacts — drafted as `.ts` and ratified at
-> the Epic 4 gate. The shapes shown here are the agreed direction, not yet ratified interfaces.
+- **The why** — [docs/skills/sourcing-concepts](docs/skills/sourcing-concepts/SKILL.md): the
+  mental model behind every shape here.
+- **Per-part how-to** — [using-events](docs/skills/using-events/SKILL.md) ·
+  [using-aggregates](docs/skills/using-aggregates/SKILL.md) ·
+  [using-projections](docs/skills/using-projections/SKILL.md) ·
+  [using-storage-adapters](docs/skills/using-storage-adapters/SKILL.md): exact signatures,
+  the full error tables, and the real driver wiring for each adapter.
+- **The rulings** — [FOUNDATION.md](FOUNDATION.md): the architecture and the decisions behind it.
