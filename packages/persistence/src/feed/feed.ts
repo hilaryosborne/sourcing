@@ -34,7 +34,15 @@ export interface StorageFeedI {
   // Read events across all streams in global commit order, strictly AFTER `after` (undefined =
   // from the very beginning), at most `limit` of them. Resumable: pass back the returned cursor.
   //
-  // ⚠ Adapter authors: "global order" has a real concurrency hazard — a sequence value can be
+  // ⚠ GDPR-CRITICAL — the feed must reflect IN-PLACE REDACTIONS. A `forget` overwrites events in
+  // place (same address, redacted payload); a read model rebuilt from the feed afterwards MUST
+  // see the redacted version, or it re-folds the original PII straight back in. So a feed reads
+  // the CURRENT event state — a resumable QUERY over the stored events — NOT an append-only copy
+  // and NOT a change-stream tail (a change stream emits the immutable original and would never
+  // reflect a later redaction; that is the trap). The cursor orders the events; the payloads are
+  // read live. (See the design doc, "GDPR × cross-stream read models".)
+  //
+  // ⚠ Adapter authors: "global order" also has a concurrency hazard — a sequence value can be
   // assigned before its row is visible, so a naive `id > cursor` scan can skip events committed
   // out of order. A correct feed must respect a visibility / low-water-mark check. Recorded so it
   // is designed, not discovered under load (see the design doc, "Open questions").
