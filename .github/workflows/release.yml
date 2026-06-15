@@ -1,0 +1,51 @@
+# Release — independent, changeset-driven publishing to GitHub Packages.
+#
+# Two-step dance, both on push to main:
+#   1. Pending changesets present -> changesets/action opens (or updates) a "Version Packages" PR
+#      that bumps ONLY the packages those changesets touch and writes their changelogs.
+#   2. That PR merged (so versions are already bumped, no changesets left) -> the action runs
+#      `pnpm release`, which builds and `changeset publish`es exactly the packages whose version
+#      is ahead of the registry. One adapter changing publishes one adapter — never lockstep.
+#
+# Auth: the built-in GITHUB_TOKEN with packages:write is enough to publish to this repo's
+# GitHub Packages — no extra secret. setup-node (via the composite's registry-url) writes the
+# npm.pkg.github.com auth line; per-package publishConfig.registry routes each publish there.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+# Don't let two release runs publish concurrently; never cancel one mid-publish.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Version PR or publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the version branch + git tags
+      pull-requests: write # open/update the Version Packages PR
+      packages: write # publish to GitHub Packages
+    env:
+      # Present at job scope so it's resolvable while the composite's frozen install reads the
+      # npm.pkg.github.com auth line, as well as during publish.
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          registry-url: https://npm.pkg.github.com
+
+      - name: Create Version PR or publish
+        uses: changesets/action@v1
+        with:
+          # `pnpm run`, not `pnpm version`/`pnpm release` — `version` is a pnpm BUILT-IN (it would
+          # bump package versions itself); `run` forces our package.json scripts instead.
+          version: pnpm run version # `changeset version` — bump + changelog
+          publish: pnpm run release # build + `changeset publish`
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

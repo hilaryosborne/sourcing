@@ -1,0 +1,33 @@
+# Shared toolchain setup — pnpm + Node + a frozen install. Every workflow starts here
+# so the version pins live in ONE place (the packageManager field is the source of truth
+# for pnpm; node-version-file reads .nvmrc). Optional registry-url is only passed by the
+# release job, which needs an .npmrc that points the @hilaryosborne scope at GitHub Packages
+# and threads NODE_AUTH_TOKEN through for publish.
+name: Setup toolchain
+description: Install pnpm and Node, restore the store cache, and run a frozen install.
+
+inputs:
+  registry-url:
+    description: Registry to write into .npmrc (set only for the publish job).
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # pnpm before Node: setup-node's cache:pnpm needs the pnpm binary already on PATH.
+    # version omitted on purpose — corepack/pnpm-action reads packageManager in package.json,
+    # so the pin is never duplicated here.
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Install Node
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: .nvmrc
+        cache: pnpm
+        registry-url: ${{ inputs.registry-url }}
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile

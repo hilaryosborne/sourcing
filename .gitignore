@@ -1,0 +1,29 @@
+# Style-capture input location (Epic 1) — Hilary's prior examples.
+# NEVER tracked, NEVER committed. Distil abstracted rules into the style
+# skill; the verbatim source here must never reach history. Deleted once
+# the style skill is ratified.
+.style-input/
+
+# Reference example library — Hilary's prior sourcing implementation, placed
+# for illustration only (CLAUDE.md: "architecture lives in the rulings, not the
+# sample code"; FOUNDATION + rulings win where they disagree). NEVER tracked,
+# NEVER committed; verbatim source must never reach history.
+ref/
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Test / coverage
+coverage/
+
+# Logs and OS cruft
+*.log
+.DS_Store
+
+# VitePress docs site — generated output and cache
+website/.vitepress/dist/
+website/.vitepress/cache/
