@@ -13,8 +13,7 @@ import { memoryReadSide } from "../../__tests__/memory-readside";
 
 const PII = "ada@example.com";
 
-const OrderPlaced = event(
-  "order.placed.v1",
+const OrderPlaced = event("order.placed.v1").version(
   object({ customer: string().min(1), email: string().min(1), total: number().int().nonnegative() }),
 );
 OrderPlaced.strip("gdpr", (payload) => ({ ...payload, email: "[redacted]", customer: "[redacted]" }));
