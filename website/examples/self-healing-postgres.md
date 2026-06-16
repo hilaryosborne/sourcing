@@ -13,19 +13,19 @@ import { event, aggregate, projection } from "@hilaryosborne/sourcing";
 import { object, string, number } from "zod";
 
 // Events: an opaque versioned topic + a Zod payload schema. create() validates eagerly.
-const CounterOpened = event("counter.opened.v1");
+const CounterOpened = event("counter.opened");
 CounterOpened.version(1, object({ name: string().min(1) }));
-const CounterIncremented = event("counter.incremented.v1");
+const CounterIncremented = event("counter.incremented");
 CounterIncremented.version(1, object({ by: number().int().positive() }));
 
 // Aggregate: a name + the events legal on its stream.
-const Counter = aggregate("counter.v1");
+const Counter = aggregate("counter");
 Counter.register(CounterOpened);
 Counter.register(CounterIncremented);
 
 // Projection: a read model { name, total }. The opening event establishes the whole shape;
 // every other handler spreads ...current. (Projections have no initial seed — see the note.)
-const Total = projection("projection.total.v1", object({ name: string(), total: number() }));
+const Total = projection("total", object({ name: string(), total: number() }));
 Total.aggregate(Counter);
 Total.handle<{ name: string }>(CounterOpened, (current, e) => ({ ...current, name: e.payload.name, total: 0 }));
 Total.handle<{ by: number }>(CounterIncremented, (current, e) => ({ ...current, total: current.total + e.payload.by }));

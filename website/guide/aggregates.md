@@ -9,10 +9,10 @@ If the committed/staged distinction is new to you, start with the [mental model]
 ```ts
 import { aggregate } from "@hilaryosborne/sourcing";
 
-export const Account = aggregate("account.v1");
-Account.register(AccountOpenedV1);
-Account.register(AccountDepositedV1);
-Account.register(AccountWithdrawnV1);
+export const Account = aggregate("account");
+Account.register(AccountOpened);
+Account.register(AccountDeposited);
+Account.register(AccountWithdrawn);
 ```
 
 - `aggregate(name): AggregateDefinition`. The name is identity (used in event references and as the stream's `name`).
@@ -35,8 +35,8 @@ Identity is exposed as plain properties: `instance.id`, `instance.name`, and `in
 ```ts
 const account = Account.instance("acc-1");
 
-account.events.add(AccountOpenedV1.create({ holder: "Ada" }).creator("user", "ada"));
-account.events.add(AccountDepositedV1.create({ amount: 100 }).creator("user", "ada"));
+account.events.add(AccountOpened.create({ holder: "Ada" }).creator("user", "ada"));
+account.events.add(AccountDeposited.create({ amount: 100 }).creator("user", "ada"));
 
 account.events.staged.length; // 2  (proposed, not yet committed)
 account.events.committed.length; // 0
@@ -45,6 +45,20 @@ account.position; // 1  (head)
 account.events.commit(); // fold staged → committed (in-memory bookkeeping; core stores nothing)
 account.events.committed.length; // 2
 account.events.staged.length; // 0
+```
+
+```mermaid
+flowchart LR
+  create["Event.create(payload).creator(…)"] -->|"events.add()"| staged["staged<br/>(provisional position)"]
+  staged -->|"events.commit()"| committed["committed<br/>(durable history)"]
+  staged -.->|"discard"| gone["evaporates — never stored"]
+  committed --> build["Projection.build()"]
+  staged --> build
+  build --> view["read model<br/>(committed ++ staged)"]
+  classDef stg fill:#fff7e6,stroke:#d8a657,color:#7a5b1e;
+  classDef com fill:#eef6f2,stroke:#2f8f74,color:#1f5e4c;
+  class staged stg;
+  class committed com;
 ```
 
 The `events` namespace:
@@ -70,7 +84,7 @@ The committed/staged split exists for exactly this: stage without committing, bu
 
 ```ts
 account.events.import(history); // committed, balance = 100
-account.events.add(AccountWithdrawnV1.create({ amount: 250 }).creator("user", "ada")); // staged only
+account.events.add(AccountWithdrawn.create({ amount: 250 }).creator("user", "ada")); // staged only
 
 const wouldBe = Balance.build(account); // folds committed ++ staged → balance -150
 if (wouldBe.balance < 0) {

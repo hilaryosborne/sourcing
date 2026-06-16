@@ -13,8 +13,8 @@ import { event } from "@hilaryosborne/sourcing";
 import { object, string } from "zod";
 
 // The creating event. `email` and `fullName` are the PII — this is what erasure must reach.
-export const UserRegisteredV1 = event("user.registered.v1");
-const userRegisteredV1 = UserRegisteredV1.version(
+export const UserRegistered = event("user.registered");
+const userRegisteredV1 = UserRegistered.version(
   1,
   object({
     email: string().email(),
@@ -24,8 +24,8 @@ const userRegisteredV1 = UserRegisteredV1.version(
 );
 
 // A later fact. `handle` is a public display name — NOT PII. It must survive erasure untouched.
-export const UserRenamedV1 = event("user.renamed.v1");
-UserRenamedV1.version(1, object({ handle: string().min(1) }));
+export const UserRenamed = event("user.renamed");
+UserRenamed.version(1, object({ handle: string().min(1) }));
 ```
 
 `create()` validates the payload the instant you build a fact — a malformed `email` throws `EventErrors.PAYLOAD_INVALID` right there, never half-formed downstream.
@@ -46,7 +46,7 @@ userRegisteredV1.strip("gdpr", (payload) => ({
 ```
 
 - `strip(context, fn)` registers a **named** stripper on that version's builder and returns it, so it chains. You can register several (`"gdpr"`, `"support-view"`, …); each is its own redaction. The stripper's input/output are typed to that version's schema.
-- We register **nothing** on `user.renamed.v1`. Events with no matching stripper pass through untouched — that is how `handle` survives while `email` and `fullName` do not.
+- We register **nothing** on `user.renamed`. Events with no matching stripper pass through untouched — that is how `handle` survives while `email` and `fullName` do not.
 
 ::: warning The test of a correct stripper is blunt
 No PII survives the produced payload. Return a **new** object; never mutate the input. Registering two strippers under one context name on one version throws `EventErrors.STRIPPER_DUPLICATE`.
@@ -54,32 +54,32 @@ No PII survives the produced payload. Return a **new** object; never mutate the 
 
 ## 🧱 The aggregate and the read model
 
-The aggregate `user.v1` declares which topics are legal on a user's stream. It enforces no business rules — it is a faithful container.
+The aggregate `user` declares which topics are legal on a user's stream. It enforces no business rules — it is a faithful container.
 
 ```ts
 import { aggregate, projection } from "@hilaryosborne/sourcing";
 
-export const User = aggregate("user.v1");
-User.register(UserRegisteredV1);
-User.register(UserRenamedV1);
+export const User = aggregate("user");
+User.register(UserRegistered);
+User.register(UserRenamed);
 ```
 
 A profile read model — the thing your app actually renders. The **creating event seeds the full shape**; the rename handler spreads `...current` and changes only what it owns.
 
 ```ts
-const ProfileV1 = object({ email: string(), handle: string() });
+const ProfileSchema = object({ email: string(), handle: string() });
 
-export const Profile = projection("projection.profile.v1", ProfileV1);
+export const Profile = projection("profile", ProfileSchema);
 Profile.aggregate(User);
 
 // The creating event establishes EVERY required field — the load-bearing rule.
-Profile.handle<{ email: string; handle: string }>(UserRegisteredV1, (current, e) => ({
+Profile.handle<{ email: string; handle: string }>(UserRegistered, (current, e) => ({
   ...current,
   email: e.payload.email,
   handle: e.payload.handle,
 }));
 
-Profile.handle<{ handle: string }>(UserRenamedV1, (current, e) => ({ ...current, handle: e.payload.handle }));
+Profile.handle<{ handle: string }>(UserRenamed, (current, e) => ({ ...current, handle: e.payload.handle }));
 ```
 
 `e.payload` is typed where we annotate the handler (`handle<P>`) — `e.payload.email` on registration, `e.payload.handle` on rename — and runtime-validated against each event's schema regardless.
@@ -92,9 +92,9 @@ No database, nothing to configure. Build a user's history in memory, then erase 
 const user = User.instance(); // core mints a nanoid id; pass your own to override
 
 user.events.add(
-  UserRegisteredV1.create({ email: "ada@example.com", fullName: "Ada Lovelace", handle: "ada" }).creator("user", "ada"),
+  UserRegistered.create({ email: "ada@example.com", fullName: "Ada Lovelace", handle: "ada" }).creator("user", "ada"),
 );
-user.events.add(UserRenamedV1.create({ handle: "countess" }).creator("user", "ada"));
+user.events.add(UserRenamed.create({ handle: "countess" }).creator("user", "ada"));
 user.events.commit();
 ```
 
@@ -110,14 +110,14 @@ const envelopes = redacted.events.export(); // committed ++ staged, in position 
 ```ts
 // [
 //   {
-//     topic: "user.registered.v1",
+//     topic: "user.registered",
 //     payload: { email: "[redacted]", fullName: "[redacted]", handle: "ada" }, // PII gone; handle kept
 //     creator: { entity: "user", uid: "ada" },
 //     position: 0,
 //     id: "…", created: "…",          // ← IDENTICAL to the pre-strip event
 //   },
 //   {
-//     topic: "user.renamed.v1",
+//     topic: "user.renamed",
 //     payload: { handle: "countess" }, // no stripper registered → passed through untouched
 //     creator: { entity: "user", uid: "ada" },
 //     position: 1,

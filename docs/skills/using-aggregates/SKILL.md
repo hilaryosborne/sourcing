@@ -5,7 +5,7 @@ description: >-
   `aggregate(name)` factory, `register`, `instance(id?)`, the `events` namespace
   (add/import/export/commit/committed/staged), identity properties, and `strip(context)` for
   right-to-forget. Use when a consumer is shaping an aggregate, staging events, previewing
-  would-be state (Scenario 3), importing history, or debugging a topic/creator error. Assumes
+  would-be state, importing history, or debugging a topic/creator error. Assumes
   the sourcing-concepts mental model. Companions: using-events, using-projections.
 ---
 
@@ -18,10 +18,10 @@ An aggregate is an in-memory **container for one entity's event stream**. It kee
 ```ts
 import { aggregate } from "@hilaryosborne/sourcing";
 
-export const Account = aggregate("account.v1");
-Account.register(AccountOpenedV1);
-Account.register(AccountDepositedV1);
-Account.register(AccountWithdrawnV1);
+export const Account = aggregate("account");
+Account.register(AccountOpened);
+Account.register(AccountDeposited);
+Account.register(AccountWithdrawn);
 ```
 
 - `aggregate(name): AggregateDefinition`. The name is identity (used in event references and as the stream's `name`).
@@ -35,7 +35,7 @@ const fresh = Account.instance(); // core mints a nanoid id
 const known = Account.instance("acc-1"); // or supply your own id
 ```
 
-`instance(id?)` returns an `AggregateInstance` with empty `committed`/`staged`. **Ids are minted by core by default** (the same nanoid mechanism events use), so an aggregate is identifiable without ever touching storage — Scenario 1 depends on this.
+`instance(id?)` returns an `AggregateInstance` with empty `committed`/`staged`. **Ids are minted by core by default** (the same nanoid mechanism events use), so an aggregate is identifiable without ever touching storage — the in-memory path depends on this.
 
 Identity is exposed as plain properties: `instance.id`, `instance.name`, and `instance.position` (the head — highest position across committed+staged, or `undefined` when empty).
 
@@ -44,8 +44,8 @@ Identity is exposed as plain properties: `instance.id`, `instance.name`, and `in
 ```ts
 const account = Account.instance("acc-1");
 
-account.events.add(AccountOpenedV1.create({ holder: "Ada" }).creator("user", "ada"));
-account.events.add(AccountDepositedV1.create({ amount: 100 }).creator("user", "ada"));
+account.events.add(AccountOpened.create({ holder: "Ada" }).creator("user", "ada"));
+account.events.add(AccountDeposited.create({ amount: 100 }).creator("user", "ada"));
 
 account.events.staged.length; // 2  (proposed, not yet committed)
 account.events.committed.length; // 0
@@ -69,15 +69,15 @@ The `events` namespace:
 
 `add()` throws `AggregateErrors.TOPIC_UNKNOWN` if the event's topic isn't registered here, and `AggregateErrors.MISSING_CREATOR` if the event carries no provenance.
 
-> **`commit()` does not persist anything** — core has no storage. It's the in-memory split-bookkeeping step. When you use the repository (Scenario 2), `repo.commit(aggregate)` persists _and_ folds for you.
+> **`commit()` does not persist anything** — core has no storage. It's the in-memory split-bookkeeping step. When you use the repository, `repo.commit(aggregate)` persists _and_ folds for you.
 
-## Scenario 3 — preview a would-be state, then decide
+## Preview a would-be state, then decide
 
 The committed/staged split exists for exactly this: stage without committing, build the projection, judge it.
 
 ```ts
 account.events.import(history); // committed, balance = 100
-account.events.add(AccountWithdrawnV1.create({ amount: 250 }).creator("user", "ada")); // staged only
+account.events.add(AccountWithdrawn.create({ amount: 250 }).creator("user", "ada")); // staged only
 
 const wouldBe = Balance.build(account); // folds committed ++ staged → balance -150
 if (wouldBe.balance < 0) {

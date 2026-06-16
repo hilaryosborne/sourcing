@@ -42,25 +42,25 @@ features:
 
 ## ⚡ Enough talk — your first projection in 60 seconds
 
-No database, nothing to configure. This snippet runs as-is.
+Install with `npm install @hilaryosborne/sourcing zod` ([one-time setup](/guide/installation)) — then, with no database and nothing else to configure, this snippet runs as-is.
 
 ```ts
 import { event, aggregate, projection } from "@hilaryosborne/sourcing";
 import { object, string, number } from "zod";
 
 // 1 — events: a topic + a typed payload schema (declared as the first version)
-const AccountOpened = event("account.opened.v1");
+const AccountOpened = event("account.opened");
 AccountOpened.version(1, object({ holder: string().min(1) }));
-const Deposited = event("account.deposited.v1");
+const Deposited = event("account.deposited");
 Deposited.version(1, object({ amount: number().int().positive() }));
 
 // 2 — an aggregate: a name + the events legal on its stream
-const Account = aggregate("account.v1");
+const Account = aggregate("account");
 Account.register(AccountOpened);
 Account.register(Deposited);
 
 // 3 — a projection: a name, an output schema, one handler per event
-const Balance = projection("projection.balance.v1", object({ holder: string(), balance: number() }));
+const Balance = projection("balance", object({ holder: string(), balance: number() }));
 Balance.aggregate(Account);
 Balance.handle<{ holder: string }>(AccountOpened, (s, e) => ({ ...s, holder: e.payload.holder, balance: 0 }));
 Balance.handle<{ amount: number }>(Deposited, (s, e) => ({ ...s, balance: s.balance + e.payload.amount }));

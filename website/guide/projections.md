@@ -10,20 +10,20 @@ If you are new to how events, aggregates, and projections fit together, start wi
 import { projection } from "@hilaryosborne/sourcing";
 import { object, string, number } from "zod";
 
-const BalanceV1 = object({ holder: string(), balance: number() });
+const BalanceSchema = object({ holder: string(), balance: number() });
 
-export const Balance = projection("projection.balance.v1", BalanceV1);
+export const Balance = projection("balance", BalanceSchema);
 Balance.aggregate(Account); // bind the aggregate this projection reads
-Balance.handle<{ holder: string }>(AccountOpenedV1, (current, e) => ({
+Balance.handle<{ holder: string }>(AccountOpened, (current, e) => ({
   ...current,
   holder: e.payload.holder,
   balance: 0,
 }));
-Balance.handle<{ amount: number }>(AccountDepositedV1, (current, e) => ({
+Balance.handle<{ amount: number }>(AccountDeposited, (current, e) => ({
   ...current,
   balance: current.balance + e.payload.amount,
 }));
-Balance.handle<{ amount: number }>(AccountWithdrawnV1, (current, e) => ({
+Balance.handle<{ amount: number }>(AccountWithdrawn, (current, e) => ({
   ...current,
   balance: current.balance - e.payload.amount,
 }));
@@ -49,7 +49,7 @@ const state = Balance.build(account); // → { holder: "Ada", balance: 100 }
 ```ts
 // the stale-path shape: only the delta is in the aggregate, the stored state seeds the fold
 const delta = Account.instance("acc-1");
-delta.events.add(AccountWithdrawnV1.create({ amount: 30 }).creator("user", "ada"));
+delta.events.add(AccountWithdrawn.create({ amount: 30 }).creator("user", "ada"));
 Balance.build(delta, { holder: "Ada", balance: 100 }); // → { holder: "Ada", balance: 70 }
 ```
 
@@ -61,7 +61,7 @@ There is **no separate `initial` seed.** Handlers are typed with a _complete_ `c
 
 ```ts
 // ✅ the creating handler establishes EVERY field the schema requires
-Balance.handle<{ holder: string }>(AccountOpenedV1, (current, e) => ({
+Balance.handle<{ holder: string }>(AccountOpened, (current, e) => ({
   ...current,
   holder: e.payload.holder,
   balance: 0,
@@ -72,10 +72,10 @@ Break the promise and you get a runtime error the types couldn't catch:
 
 ```ts
 // ❌ a projection whose first folded event is a non-creating event
-const bad = projection("projection.bad.v1", BalanceV1).aggregate(Account);
-bad.handle<{ amount: number }>(AccountWithdrawnV1, (c, e) => ({ ...c, balance: c.balance - e.payload.amount }));
+const bad = projection("bad", BalanceSchema).aggregate(Account);
+bad.handle<{ amount: number }>(AccountWithdrawn, (c, e) => ({ ...c, balance: c.balance - e.payload.amount }));
 const a = Account.instance();
-a.events.add(AccountWithdrawnV1.create({ amount: 5 }).creator("user", "x"));
+a.events.add(AccountWithdrawn.create({ amount: 5 }).creator("user", "x"));
 bad.build(a); // throws ProjectionErrors.OUTPUT_INVALID — `holder` was never established
 ```
 

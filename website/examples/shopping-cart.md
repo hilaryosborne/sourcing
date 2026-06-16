@@ -20,9 +20,9 @@ A cart's whole life is four facts. Each event is a **topic** (an opaque, version
 import { event } from "@hilaryosborne/sourcing";
 import { object, string, number } from "zod";
 
-const CartOpened = event("cart.opened.v1");
+const CartOpened = event("cart.opened");
 CartOpened.version(1, object({ shopper: string().min(1) }));
-const ItemAdded = event("cart.item-added.v1");
+const ItemAdded = event("cart.item-added");
 ItemAdded.version(
   1,
   object({
@@ -31,9 +31,9 @@ ItemAdded.version(
     price: number().int().nonnegative(), // minor units (pennies) — integers, no float drift
   }),
 );
-const ItemRemoved = event("cart.item-removed.v1");
+const ItemRemoved = event("cart.item-removed");
 ItemRemoved.version(1, object({ sku: string().min(1) }));
-const CheckedOut = event("cart.checked-out.v1");
+const CheckedOut = event("cart.checked-out");
 CheckedOut.version(1, object({}));
 ```
 
@@ -46,7 +46,7 @@ An aggregate is an in-memory container for one cart's event stream. Name it, the
 ```ts
 import { aggregate } from "@hilaryosborne/sourcing";
 
-const Cart = aggregate("cart.v1");
+const Cart = aggregate("cart");
 Cart.register(CartOpened);
 Cart.register(ItemAdded);
 Cart.register(ItemRemoved);
@@ -63,14 +63,14 @@ Now fold the facts into a read model. A projection is a name, an output schema (
 import { projection } from "@hilaryosborne/sourcing";
 import { object, string, number, record } from "zod";
 
-const CartSummaryV1 = object({
+const CartSummarySchema = object({
   shopper: string(),
   items: record(string(), number()), // sku → qty
   lineCount: number(), // distinct skus
   subtotal: number(), // minor units
 });
 
-const CartSummary = projection("projection.cart.v1", CartSummaryV1);
+const CartSummary = projection("cart", CartSummarySchema);
 CartSummary.aggregate(Cart); // bind the aggregate this projection reads
 
 // The CREATING event establishes the WHOLE shape — every field the schema requires.
@@ -102,7 +102,7 @@ CartSummary.handle<{ sku: string }>(ItemRemoved, (current, e) => {
 Notice `e.payload` is typed inside each handler because we annotate it — `handle<P>` keys off the event _definition_, not a topic string, so `e.payload.sku` and `e.payload.price` are typed and runtime-validated against the schema. (And we simply don't handle `CheckedOut` in the summary — unmapped topics are tolerated; `build` folds what it has handlers for and skips the rest.)
 
 ::: warning The first folded event establishes the shape
-Handlers receive a _complete_ `current: State`, never a `Partial` — that's what lets you write `current.subtotal` without `| undefined` everywhere. You uphold the bargain by making your **creating event** (`cart.opened.v1`) return every required field. If the first folded event were a non-creating one, the model would be missing fields and `build` throws `ProjectionErrors.OUTPUT_INVALID` — a runtime error the types can't catch. Rule of thumb: every stream opens with `*.opened`; every other handler spreads `...current`.
+Handlers receive a _complete_ `current: State`, never a `Partial` — that's what lets you write `current.subtotal` without `| undefined` everywhere. You uphold the bargain by making your **creating event** (`cart.opened`) return every required field. If the first folded event were a non-creating one, the model would be missing fields and `build` throws `ProjectionErrors.OUTPUT_INVALID` — a runtime error the types can't catch. Rule of thumb: every stream opens with `*.opened`; every other handler spreads `...current`.
 :::
 
 ## 🧺 Fill the cart and read it
@@ -169,7 +169,7 @@ You _could_ eyeball `subtotal` before adding the checkout event. But by staging 
 ## What you just saw
 
 - **Events are the model.** A cart is four facts (`opened`, `item-added`, `item-removed`, `checked-out`) — you record what happened and fold it on demand, never mutating a "cart object".
-- **The projection is a pure fold**, validated against its schema on every build. The creating event (`cart.opened.v1`) seeds the whole shape; every other handler spreads `...current`.
+- **The projection is a pure fold**, validated against its schema on every build. The creating event (`cart.opened`) seeds the whole shape; every other handler spreads `...current`.
 - **The aggregate holds no opinions** — it staged an empty-cart checkout and an over-limit checkout without complaint. Business rules aren't its job.
 - **Staged validation is the signature.** Stage → `build` the would-be state → let _your_ code decide. The library computes; your `if` rules. It never learns your limit, and that's the point.
 
