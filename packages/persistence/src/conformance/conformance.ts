@@ -19,6 +19,7 @@ const STREAM_B: StorageStream = { id: "agg-b", name: "test.v1" };
 const env = (stream: StorageStream, position: number, payload: unknown = { n: position }): EventEnvelopeV1Type => ({
   id: `${stream.id}-${position}`,
   topic: "test.event.v1",
+  version: 0,
   position,
   aggregate: { id: stream.id, name: stream.name },
   creator: { entity: "system", uid: "conformance" },

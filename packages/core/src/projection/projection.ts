@@ -80,7 +80,9 @@ const projection = <State>(name: string, schema: ZodType<State>): ProjectionDefi
         (a, b) => (a.get.position() ?? 0) - (b.get.position() ?? 0),
       );
       for (const instance of events) {
-        const envelope = instance.build();
+        // consume() (not build()): mappers key off the head definition, so they require the
+        // payload UPCAST to head. build() is the faithful stored form, for persistence only.
+        const envelope = instance.consume();
         const handler = byTopic.get(envelope.topic);
         if (!handler) continue; // tolerate unmapped topics — still folds the rest
         state = handler.apply(state, envelope);
