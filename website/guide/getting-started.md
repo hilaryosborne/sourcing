@@ -36,8 +36,8 @@ import { event, aggregate, projection } from "@hilaryosborne/sourcing";
 import { object, string, number } from "zod";
 
 // 1 — Events: a topic (opaque, versioned string) + a Zod payload schema.
-const AccountOpened = event("account.opened.v1", object({ holder: string().min(1) }));
-const Deposited = event("account.deposited.v1", object({ amount: number().int().positive() }));
+const AccountOpened = event("account.opened.v1").version(object({ holder: string().min(1) }));
+const Deposited = event("account.deposited.v1").version(object({ amount: number().int().positive() }));
 
 // 2 — An aggregate: a name + the events that are legal on its stream.
 const Account = aggregate("account.v1");

@@ -7,14 +7,14 @@ import aggregate from "../aggregate/aggregate";
 import projection from "../projection/projection";
 
 // --- Events ---
-export const FileCreateV1 = event("file.create.v1", object({ name: string().min(1), owner: string().min(1) }));
+export const FileCreateV1 = event("file.create.v1").version(object({ name: string().min(1), owner: string().min(1) }));
 // The owner is PII — the gdpr stripper redacts it. Registered once, here.
 FileCreateV1.strip("gdpr", (payload) => ({ ...payload, owner: "[redacted]" }));
 
-export const FileRenameV1 = event("file.rename.v1", object({ name: string().min(1) }));
+export const FileRenameV1 = event("file.rename.v1").version(object({ name: string().min(1) }));
 
 // An event the file aggregate does NOT register — for TOPIC_UNKNOWN paths.
-export const FolderCreateV1 = event("folder.create.v1", object({ name: string().min(1) }));
+export const FolderCreateV1 = event("folder.create.v1").version(object({ name: string().min(1) }));
 
 // --- Aggregate ---
 export const FileAggregate = aggregate("file.v1");

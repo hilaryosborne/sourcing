@@ -10,7 +10,7 @@ export { nanoid } from "nanoid";
 
 // --- Events + strippers (standalone, fluent builder) ---
 export { default as event } from "./event/event";
-export type { EventDefinition, Stripper } from "./event/event";
+export type { EventDefinition, EventStart, VersionPending, Stripper } from "./event/event";
 export type { EventInstance } from "./event/event.instance";
 export { EventErrors } from "./event/event.errors";
 export { EventEnvelopeV1, CreatorSchemaV1, AggregateRefV1 } from "./event/event.schema";

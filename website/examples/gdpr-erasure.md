@@ -23,7 +23,7 @@ export const UserRegisteredV1 = event(
 );
 
 // A later fact. `handle` is a public display name — NOT PII. It must survive erasure untouched.
-export const UserRenamedV1 = event("user.renamed.v1", object({ handle: string().min(1) }));
+export const UserRenamedV1 = event("user.renamed.v1").version(object({ handle: string().min(1) }));
 ```
 
 `create()` validates the payload the instant you build a fact — a malformed `email` throws `EventErrors.PAYLOAD_INVALID` right there, never half-formed downstream.

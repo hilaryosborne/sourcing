@@ -13,8 +13,8 @@ import { event, aggregate, projection } from "@hilaryosborne/sourcing";
 import { object, string, number } from "zod";
 
 // Events: an opaque versioned topic + a Zod payload schema. create() validates eagerly.
-const CounterOpened = event("counter.opened.v1", object({ name: string().min(1) }));
-const CounterIncremented = event("counter.incremented.v1", object({ by: number().int().positive() }));
+const CounterOpened = event("counter.opened.v1").version(object({ name: string().min(1) }));
+const CounterIncremented = event("counter.incremented.v1").version(object({ by: number().int().positive() }));
 
 // Aggregate: a name + the events legal on its stream.
 const Counter = aggregate("counter.v1");

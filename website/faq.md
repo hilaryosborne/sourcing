@@ -16,7 +16,18 @@ No, and no. Event sourcing is a _storage_ choice — how you persist state. CQRS
 
 ## How do I version events when the payload changes?
 
-You don't, mechanically — **versioning is a naming convention, not a feature**. A topic like `account.opened.v1` is an opaque string; the library never parses it or relates `.v1` to `.v2`. A breaking payload change means a new topic (`account.opened.v2`) and a handler for it alongside the old one. There are no upcasters and no migration engine — deliberately. Upcaster machinery is the heaviest part of most event-sourcing frameworks, and it couples your read path to a migration history. The cost of this stance: you keep handling old topics as long as old events exist. The benefit: there is no migration engine to fight, and old facts stay exactly as they were written.
+Declare a new version on the event and an **upcaster** that lifts the previous shape into it:
+
+```ts
+const AccountOpened = event("account.opened")
+  .version(object({ holder: string() }))
+  .version(object({ holder: object({ name: string() }), country: string() }))
+  .upcast((v1) => ({ holder: { name: v1.holder }, country: "unknown" }));
+```
+
+Stored events are **never rewritten**. Each records the ordinal it was written at, and at read time the library walks it forward through your upcasters so projections and aggregates only ever see the **latest** shape. The safeguard is the type system: add a version whose shape differs and the upcaster won't compile until you write it — and every projection mapper that reads the changed shape fails to compile until you fix it. No silent drift.
+
+This is deliberately _not_ the heavy upcaster machinery of most frameworks. There's no migration engine, no version field for the library to parse, nothing rewritten on disk, and it's opt-in per event — a single `.version()` is the common case, and you never think about upcasters until a shape actually changes. The library still understands nothing about what a version _means_; it just applies the ordered chain of pure functions you declared. Versioning stays mechanism, not judgment. (Strippers are per-version too — erasure redacts each event in its own version's shape.)
 
 ## How are concurrent writes handled?
 

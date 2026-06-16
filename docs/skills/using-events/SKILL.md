@@ -2,16 +2,17 @@
 name: using-events
 description: >-
   How to DEFINE and USE events with the published @hilaryosborne/sourcing core — the
-  `event(topic, schema)` factory, the fluent instance builder (create/creator/headers),
-  strippers for right-to-forget, and the mechanical errors events raise. Use when a consumer
-  is modelling a domain into events, choosing topics, attaching provenance, registering
-  redactions, or debugging a payload/stripper error. Assumes the sourcing-concepts mental
-  model. Companions: using-aggregates, using-projections.
+  `event(topic).version(schema)` builder, versions + upcasters for read-time evolution, the
+  fluent instance builder (create/creator/headers), per-version strippers for right-to-forget,
+  and the mechanical errors events raise. Use when a consumer is modelling a domain into
+  events, choosing topics, evolving a payload shape, attaching provenance, registering
+  redactions, or debugging a payload/stripper/upcast error. Assumes the sourcing-concepts
+  mental model. Companions: using-aggregates, using-projections.
 ---
 
 # Using events
 
-An event is a **topic** (opaque unique string) + a **payload schema** (Zod). Definitions are standalone — built on their own, registered onto aggregates later, reusable across many.
+An event is a **topic** + one or more **versioned payload schemas** (Zod). Definitions are standalone — built on their own, registered onto aggregates later, reusable across many.
 
 ## Define an event
 
@@ -19,12 +20,12 @@ An event is a **topic** (opaque unique string) + a **payload schema** (Zod). Def
 import { event } from "@hilaryosborne/sourcing";
 import { object, string, number } from "zod";
 
-export const AccountOpenedV1 = event("account.opened.v1", object({ holder: string().min(1) }));
-export const AccountDepositedV1 = event("account.deposited.v1", object({ amount: number().int().positive() }));
+export const AccountOpenedV1 = event("account.opened.v1").version(object({ holder: string().min(1) }));
+export const AccountDepositedV1 = event("account.deposited.v1").version(object({ amount: number().int().positive() }));
 ```
 
-- `event<P>(topic: string, schema: ZodType<P>): EventDefinition<P>` — `P` is inferred from the schema, so payloads are fully typed everywhere downstream.
-- **The topic is opaque and versioned-by-convention.** Pick `name.verb.vN`. A breaking payload change = a new topic (`...v2`); the library will never relate them, upcast, or migrate. That is your call to make in the string.
+- `event(topic).version(schema)` returns the event definition; `P` is inferred from the schema, so payloads are fully typed everywhere downstream. A single `.version()` is the common case — upcasters only matter once a shape changes.
+- **The topic is an opaque string; the version chain belongs to the library.** Pick a stable topic. Evolving a payload is a new `.version()` + `.upcast()` (below) — old events lift to the latest shape at read, not branched across parallel topics. (You can still suffix `.vN` in the topic; the library treats the whole string as opaque.)
 - Put each definition where it's reusable (often a `events/` module). The same definition can be `register`ed on multiple aggregates — topic uniqueness is per-aggregate, not global.
 
 ## Create an instance (the fluent builder)
@@ -39,7 +40,23 @@ const opened = AccountOpenedV1.create({ holder: "Ada" }) // validates the payloa
 - `creator(entity, uid)` is **required before the event can be staged** — a permanent fact with bogus provenance is worse than one that refuses to exist. Forgetting it surfaces later as `AggregateErrors.MISSING_CREATOR` when you `add()` it.
 - `position` and the aggregate reference are **not** set here — they're stamped when the aggregate stages the event (see using-aggregates). A freshly-created event has no position yet.
 
-Read an instance through its `get` accessors: `opened.get.id()`, `.get.topic()`, `.get.payload()`, `.get.creator()`, `.get.headers()`, `.get.created()`, and (once staged) `.get.position()`, `.get.aggregate()`.
+Read an instance through its `get` accessors: `opened.get.id()`, `.get.topic()`, `.get.payload()` (always the **latest** shape — upcast on read), `.get.version()` (the stored ordinal), `.get.creator()`, `.get.headers()`, `.get.created()`, and (once staged) `.get.position()`, `.get.aggregate()`.
+
+## Versions & upcasters — evolving a payload
+
+When a payload shape changes, add a `.version()` and an `.upcast()` that lifts the previous version's payload into the new one. The **first** version has no upcast (nothing precedes it); **every later** version must declare one — the type-state builder enforces both at compile time.
+
+```ts
+export const AccountOpened = event("account.opened")
+  .version(object({ holder: string().min(1) }))
+  .version(object({ holder: object({ name: string().min(1) }), country: string().min(1) }))
+  .upcast((v1) => ({ holder: { name: v1.holder }, country: "unknown" }));
+```
+
+- **New events are born at the latest version**; `create(...)` takes the head shape.
+- **Stored events are never rewritten.** Each records the ordinal it was written at; at read time the library walks it forward through your upcasters, so projections and aggregates only ever see the **latest** shape (`build()` still returns the faithful stored form for persistence).
+- **The compiler is the safeguard.** Add a version whose shape differs and `.upcast` won't compile until you write it — and every projection mapper reading the changed shape fails until you fix it. `EventErrors.UPCAST_INVALID` is the runtime backstop.
+- **Mechanism, not judgment.** The library applies your ordered chain of pure functions by index; it never interprets what a version _means_. No migration engine, no version field to parse, nothing rewritten on disk.
 
 ## Strippers — right-to-forget, declared next to the event
 
@@ -51,15 +68,19 @@ AccountOpenedV1.strip("export-redaction", (payload) => ({ ...payload, holder: pa
 ```
 
 - `strip(context, fn)` registers a **named** stripper so you can have several contexts (`"gdpr"`, `"support-view"`, …). It returns the definition, so it chains.
+- **Strippers are per version.** Register them on the version whose shape they redact; right-to-forget applies the one matching each event's stored version, redacting in that version's own vocabulary.
 - The aggregate's `strip(context)` later walks events and applies the matching stripper to each (see using-aggregates / right-to-forget). Events with no matching stripper pass through untouched.
-- **The test of a correct stripper: no PII survives the produced payload.** Return a new object; never mutate the input. Registering two strippers under one context name throws `EventErrors.STRIPPER_DUPLICATE`.
+- **The test of a correct stripper: no PII survives the produced payload.** Return a new object; never mutate the input. The output is re-validated against its version's schema — redact to a schema-valid sentinel, or it throws `EventErrors.STRIP_INVALID`. Two strippers under one context name on one version throws `EventErrors.STRIPPER_DUPLICATE`.
 
 ## Errors events raise (all mechanical)
 
-| Error                            | When                                                                           |
-| -------------------------------- | ------------------------------------------------------------------------------ |
-| `EventErrors.PAYLOAD_INVALID`    | `create(payload)` got a payload that fails the schema. Fail-fast, at creation. |
-| `EventErrors.STRIPPER_DUPLICATE` | Two strippers registered under the same context name on one definition.        |
+| Error                            | When                                                                                |
+| -------------------------------- | ----------------------------------------------------------------------------------- |
+| `EventErrors.PAYLOAD_INVALID`    | `create(payload)` got a payload that fails the head schema. Fail-fast, at creation. |
+| `EventErrors.STRIPPER_DUPLICATE` | Two strippers registered under the same context name on one version.                |
+| `EventErrors.STRIP_INVALID`      | A stripper's output failed its own version's schema (redact to a valid sentinel).   |
+| `EventErrors.UPCAST_INVALID`     | An upcaster returned a payload that fails the next version's schema, on read.       |
+| `EventErrors.VERSION_UNKNOWN`    | A stored event's version ordinal isn't declared on the definition's chain.          |
 
 Import the enum to switch on faults: `import { EventErrors } from "@hilaryosborne/sourcing"`.
 
@@ -67,5 +88,5 @@ Import the enum to switch on faults: `import { EventErrors } from "@hilaryosborn
 
 - **Don't defer `creator`.** Add it at construction; it's required and there is no default.
 - **Don't read `position` before staging** — it's `undefined` until an aggregate stamps it, and provisional (it evaporates if you discard the staged event) until commit.
-- **Don't encode version relationships in code.** `account.opened.v1` and `...v2` are unrelated strings to the library. If you need both understood, register both and handle both.
+- **Evolve with `.version()`, not parallel topics.** To change a payload shape, add a version + upcast so old events lift to the latest shape automatically — don't register two topics and branch every projection on which one fired.
 - **Re-exported `nanoid`.** Core re-exports `nanoid` (`import { nanoid } from "@hilaryosborne/sourcing"`) as a convenience if you mint your own payload uids.

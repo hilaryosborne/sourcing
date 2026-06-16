@@ -12,8 +12,8 @@ import { memoryStorage } from "../../__tests__/memory-storage";
 import { consoleObserver } from "../observer.console";
 import type { ErrorReport, HookEvent, Observer } from "../observer.interface";
 
-const Opened = event("account.opened.v1", object({ holder: string().min(1) }));
-const Deposited = event("account.deposited.v1", object({ amount: number().int().positive() }));
+const Opened = event("account.opened.v1").version(object({ holder: string().min(1) }));
+const Deposited = event("account.deposited.v1").version(object({ amount: number().int().positive() }));
 Opened.strip("gdpr", (payload) => ({ ...payload, holder: "[redacted]" }));
 
 const Account = aggregate("account.v1");

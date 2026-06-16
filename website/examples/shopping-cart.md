@@ -20,7 +20,7 @@ A cart's whole life is four facts. Each event is a **topic** (an opaque, version
 import { event } from "@hilaryosborne/sourcing";
 import { object, string, number } from "zod";
 
-const CartOpened = event("cart.opened.v1", object({ shopper: string().min(1) }));
+const CartOpened = event("cart.opened.v1").version(object({ shopper: string().min(1) }));
 const ItemAdded = event(
   "cart.item-added.v1",
   object({
@@ -29,11 +29,11 @@ const ItemAdded = event(
     price: number().int().nonnegative(), // minor units (pennies) — integers, no float drift
   }),
 );
-const ItemRemoved = event("cart.item-removed.v1", object({ sku: string().min(1) }));
-const CheckedOut = event("cart.checked-out.v1", object({}));
+const ItemRemoved = event("cart.item-removed.v1").version(object({ sku: string().min(1) }));
+const CheckedOut = event("cart.checked-out.v1").version(object({}));
 ```
 
-The topic is yours to name and yours to version. A breaking change to `cart.item-added`'s payload is a new topic (`...v2`) — the library will never relate, upcast, or migrate the two. That decision lives in the string, where you can read it.
+The topic is yours to name. When `cart.item-added`'s payload shape needs to change, add a `.version()` + `.upcast()` so old events lift to the latest shape at read — the compiler forces every mapper, and nothing is rewritten on disk. ([How versioning works →](/guide/events#versions-upcasters-evolving-a-payload))
 
 ## 🛍️ The aggregate
 

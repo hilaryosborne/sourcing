@@ -4,7 +4,7 @@ One stream of facts about a single document — created, renamed, shared, revoke
 
 ## 🧱 The events
 
-Five facts a document can record over its life. Each is a topic (opaque, versioned-by-convention string) plus a Zod payload schema — nothing more.
+Five facts a document can record over its life. Each is a topic plus a Zod payload schema, declared as the event's first version — nothing more.
 
 ```ts
 import { event } from "@hilaryosborne/sourcing";
@@ -12,11 +12,13 @@ import { object, string, enum as zenum } from "zod";
 
 const Role = zenum(["viewer", "editor"]);
 
-export const FileCreatedV1 = event("file.created.v1", object({ name: string().min(1), owner: string().min(1) }));
-export const FileRenamedV1 = event("file.renamed.v1", object({ name: string().min(1) }));
-export const FileSharedV1 = event("file.shared.v1", object({ withUser: string().min(1), role: Role }));
-export const FileAccessRevokedV1 = event("file.access-revoked.v1", object({ fromUser: string().min(1) }));
-export const FileArchivedV1 = event("file.archived.v1", object({}));
+export const FileCreatedV1 = event("file.created.v1").version(
+  object({ name: string().min(1), owner: string().min(1) }),
+);
+export const FileRenamedV1 = event("file.renamed.v1").version(object({ name: string().min(1) }));
+export const FileSharedV1 = event("file.shared.v1").version(object({ withUser: string().min(1), role: Role }));
+export const FileAccessRevokedV1 = event("file.access-revoked.v1").version(object({ fromUser: string().min(1) }));
+export const FileArchivedV1 = event("file.archived.v1").version(object({}));
 ```
 
 `create()` validates each payload the instant you build it — a malformed fact never gets half-made. And `creator` is required: every fact below carries who made it.

@@ -8,9 +8,9 @@ import aggregate from "../aggregate/aggregate";
 import projection from "../projection/projection";
 
 // --- Domain: a bank account (deposits add, withdrawals subtract) ---
-export const AccountOpenedV1 = event("account.opened.v1", object({ holder: string().min(1) }));
-export const AccountDepositedV1 = event("account.deposited.v1", object({ amount: number().int().positive() }));
-export const AccountWithdrawnV1 = event("account.withdrawn.v1", object({ amount: number().int().positive() }));
+export const AccountOpenedV1 = event("account.opened.v1").version(object({ holder: string().min(1) }));
+export const AccountDepositedV1 = event("account.deposited.v1").version(object({ amount: number().int().positive() }));
+export const AccountWithdrawnV1 = event("account.withdrawn.v1").version(object({ amount: number().int().positive() }));
 
 export const Account = aggregate("account.v1");
 Account.register(AccountOpenedV1);

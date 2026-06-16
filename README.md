@@ -7,9 +7,9 @@
 > 📖 **Full documentation, guides, and worked examples → [hilaryosborne.github.io/sourcing](https://hilaryosborne.github.io/sourcing/)**
 
 ```ts
-// an event is a topic + a typed payload
-const AccountOpened = event("account.opened.v1", object({ holder: string() }));
-const Deposited = event("account.deposited.v1", object({ amount: number().int().positive() }));
+// an event is a topic + a typed payload (declared as its first version)
+const AccountOpened = event("account.opened.v1").version(object({ holder: string() }));
+const Deposited = event("account.deposited.v1").version(object({ amount: number().int().positive() }));
 
 // a projection folds events into a read model
 const Balance = projection("projection.balance.v1", object({ holder: string(), balance: number() }));
@@ -25,7 +25,7 @@ Balance.build(account); // → { holder: "Ada", balance: 100 }
 
 Most applications store the _current_ state of a thing: one row per account, overwritten on every change. That row is lossy by construction — the moment a balance goes from 100 to 70, _why_ it changed is gone. Event sourcing inverts that: you store the **sequence of facts** that happened (`opened`, `deposited 100`, `withdrew 30`) and treat current state as a _fold_ over those facts. Nothing is overwritten; the history _is_ the database. You get a perfect audit trail, the ability to derive new read models retroactively from data you already have, and time-travel debugging for free.
 
-The catch is that event sourcing libraries tend to do **too much**. They ship a "decider" or command-handler layer that wants to own your business rules; they bake in an event store; they carry upcaster machinery for versioning. You adopt the pattern and inherit a framework.
+The catch is that event sourcing libraries tend to do **too much**. They ship a "decider" or command-handler layer that wants to own your business rules; they bake in an event store; they bury versioning in upcaster machinery that couples your read path to a migration history. You adopt the pattern and inherit a framework.
 
 This library is the opposite bet. It is **mechanism, not judgment** — a deliberately small set of primitives:
 
@@ -34,7 +34,7 @@ This library is the opposite bet. It is **mechanism, not judgment** — a delibe
 - **It has no opinion on storage.** The core has zero storage dependencies — it never reaches a database. Persistence is a separate package you add only when you want it, behind one interface with three reference adapters (Postgres, Mongo, S3) or your own.
 - **The only errors it raises are mechanical** — a payload that fails its schema, a malformed projection mapper, a topic collision, a lost optimistic-concurrency race. It will never say "insufficient funds." That sentence is yours to write.
 
-A few deliberate stances that distinguish it (each explained in the [FAQ](#faq)): **versioning is a naming convention, not a feature** (`file.create.v1` is an opaque string — no upcasters, no migration engine); **right-to-forget is built in** via in-place stripping; and **the committed/staged split** is what lets you do business validation without the library ever knowing what validation is.
+A few deliberate stances that distinguish it (each explained in the [FAQ](#faq)): **type-safe event versioning, no migration engine** — events evolve through an ordered chain of upcasters you declare, the compiler forces every mapper when a shape changes, and stored facts are lifted to the latest shape at read without being rewritten on disk; **right-to-forget is built in** via in-place stripping; and **the committed/staged split** is what lets you do business validation without the library ever knowing what validation is.
 
 > **When you should _not_ reach for this:** if you only ever need the latest state and will never ask "how did it get this way?", event sourcing is overhead you don't need — use a row in a table. See ["Do I actually need event sourcing?"](#do-i-actually-need-event-sourcing) before adopting.
 
@@ -80,9 +80,9 @@ Three primitives, three steps. This snippet runs as-is — no database, nothing 
 import { event, aggregate, projection } from "@hilaryosborne/sourcing";
 import { object, string, number } from "zod";
 
-// 1 — Events: a topic (opaque, versioned string) + a Zod payload schema.
-const AccountOpened = event("account.opened.v1", object({ holder: string().min(1) }));
-const Deposited = event("account.deposited.v1", object({ amount: number().int().positive() }));
+// 1 — Events: a topic + a Zod payload schema, declared as the event's first version.
+const AccountOpened = event("account.opened.v1").version(object({ holder: string().min(1) }));
+const Deposited = event("account.deposited.v1").version(object({ amount: number().int().positive() }));
 
 // 2 — An aggregate: a name + the events that are legal on its stream.
 const Account = aggregate("account.v1");
@@ -282,7 +282,18 @@ No, and no. Event sourcing is a _storage_ choice — how you persist state. CQRS
 
 ### How do I version events when the payload changes?
 
-You don't, mechanically — **versioning is a naming convention, not a feature**. A topic like `account.opened.v1` is an opaque string; the library never parses it or relates `.v1` to `.v2`. A breaking payload change means a new topic (`account.opened.v2`) and a handler for it alongside the old one. There are no upcasters and no migration engine — deliberately. Upcaster machinery is the heaviest part of most event-sourcing frameworks, and it couples your read path to a migration history. The cost of this stance: you keep handling old topics as long as old events exist. The benefit: there is no migration engine to fight, and old facts stay exactly as they were written.
+Declare a new version on the event and an **upcaster** that lifts the previous shape into it:
+
+```ts
+const AccountOpened = event("account.opened")
+  .version(object({ holder: string() }))
+  .version(object({ holder: object({ name: string() }), country: string() }))
+  .upcast((v1) => ({ holder: { name: v1.holder }, country: "unknown" }));
+```
+
+Stored events are **never rewritten**. Each one records the ordinal it was written at, and at read time the library walks it forward through your upcasters so projections and aggregates only ever see the **latest** shape. The safeguard is the type system: add a version whose shape differs and the upcaster won't compile until you write it — and every projection mapper that reads the changed shape fails to compile until you fix it. No silent drift.
+
+This is deliberately _not_ the heavy upcaster machinery of most frameworks. There's no migration engine, no version field for the library to parse, nothing rewritten on disk, and it's opt-in per event — a single `.version()` is the common case, and you never think about upcasters until a shape actually changes. The library still understands nothing about what a version _means_; it just applies the ordered chain of pure functions you declared. Versioning stays mechanism, not judgment. (Strippers are per-version too — erasure redacts each event in its own version's shape.)
 
 ### How are concurrent writes handled?
 

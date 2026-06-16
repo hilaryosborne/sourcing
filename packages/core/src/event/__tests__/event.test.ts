@@ -49,7 +49,7 @@ describe("event", () => {
   });
 
   it("strip() registers contextually and rejects a duplicate name in one scope", () => {
-    const def = event("file.note.v1", object({ text: string() }));
+    const def = event("file.note.v1").version(object({ text: string() }));
     def.strip("gdpr", (p) => ({ ...p, text: "" }));
     expect(() => def.strip("gdpr", (p) => p)).toThrow(EventErrors.STRIPPER_DUPLICATE);
   });

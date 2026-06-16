@@ -46,7 +46,7 @@ An audit log _describes_ changes to a state table that's still the source of tru
 
 Here's where most event-sourcing libraries lose the plot — and where this one deliberately stops short.
 
-They ship a **framework**. A "decider" or command-handler layer that wants to own your business rules. A baked-in event store. Upcaster machinery for versioning. You adopt the pattern and inherit an opinion about how your whole domain should be structured.
+They ship a **framework**. A "decider" or command-handler layer that wants to own your business rules. A baked-in event store. Versioning buried in upcaster machinery that couples your read path to a migration history. You adopt the pattern and inherit an opinion about how your whole domain should be structured.
 
 This library is the opposite bet. It is a **mechanism**: a small set of primitives that record facts and derive state, and then get out of your way.
 
@@ -69,7 +69,7 @@ The library answers _"what would the state be?"_ Your app answers _"is this allo
 These distinguish the library, and each is a _choice_, not an omission:
 
 - **No storage opinion in the core.** The core has zero storage dependencies — it never reaches a database. Persistence is a separate package, behind one interface, with Postgres / Mongo / S3 reference adapters or your own. ([Storage adapters →](/guide/storage-adapters))
-- **Versioning is a naming convention, not a feature.** `account.opened.v1` is an opaque string; a breaking change is a new topic (`...v2`) with its own handler. No upcasters, no migration engine — the heaviest part of most ES frameworks, deliberately absent. ([Why →](/faq#how-do-i-version-events-when-the-payload-changes))
+- **Type-safe versioning, no migration engine.** Evolve a payload with a declared `.version()` + `.upcast()`; old events lift to the latest shape at read, nothing is rewritten on disk, and the compiler forces every mapper when a shape changes. The mechanism-not-framework take on upcasting — opt-in per event, no version field to parse. ([Why →](/faq#how-do-i-version-events-when-the-payload-changes))
 - **Right-to-forget is built in.** Immutable history and GDPR erasure, reconciled by in-place stripping — and observability is metadata-only _by type_, so it can't leak the PII back out. ([Right-to-forget →](/guide/right-to-forget))
 - **The only errors it raises are mechanical** — a bad schema, a malformed mapper, a topic collision, a lost concurrency race. It will never say "insufficient funds." That sentence is yours to write.
 
@@ -88,7 +88,7 @@ Honesty buys trust, so here's the bill:
 - **You store more data.** Every change is a retained fact. Disk is cheap; the trade is deliberate.
 - **There's a mental-model shift.** Thinking in events instead of rows is new for most teams. That's normal — the [Concepts page](/concepts) is built to get you there, and the [examples](/examples) make it concrete.
 - **The S3 adapter has real costs.** Single-object-per-aggregate means unbounded object growth and no cheap deltas — a structural trade for atomic reads. Postgres/Mongo don't have this. ([FAQ →](/faq#what-s-the-performance-and-storage-cost))
-- **Old event versions stick around.** No upcasters means you keep handling old topics as long as old events exist. The upside: no migration engine to fight.
+- **Old versions live in your upcast chain.** You can't drop a version while events written at it still exist — the chain has to keep lifting them forward, and each evolution costs a small upcaster (the compiler makes you write it). The upside: projections only ever see the latest shape, with no migration engine to fight.
 
 ## 🚦 When _not_ to use it
 

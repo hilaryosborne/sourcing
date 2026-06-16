@@ -12,9 +12,9 @@ import { memoryStorage } from "./memory-storage";
 const PII = "alice@example.com";
 
 // A user domain with PII (the email on registration) and a non-PII rename.
-const UserRegisteredV1 = event("user.registered.v1", object({ email: string().min(1) }));
+const UserRegisteredV1 = event("user.registered.v1").version(object({ email: string().min(1) }));
 UserRegisteredV1.strip("gdpr", (payload) => ({ ...payload, email: "[redacted]" }));
-const UserRenamedV1 = event("user.renamed.v1", object({ handle: string().min(1) }));
+const UserRenamedV1 = event("user.renamed.v1").version(object({ handle: string().min(1) }));
 
 const User = aggregate("user.v1");
 User.register(UserRegisteredV1);
