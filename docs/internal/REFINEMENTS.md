@@ -28,6 +28,7 @@ Recorded 2026-06-15. Prioritised **P0** (adoption blocker for common cases) → 
 ## B. Schema evolution
 
 ### B1 · Event versioning ergonomics — **P0**
+**⊘ Superseded by Epic 8 (PLAN-EVENT-VERSIONING.md)** — the library no longer stays out of versioning; it ships first-class type-safe upcasters. Retained for history.
 **The question:** "‘Versioning is a naming convention' is elegant, but in year three I have v1/v2/v3 of ten events and every projection carries handlers for all of them. How do I deprecate?"
 **Gap:** No upcasting is a deliberate, defensible stance — but the consumer-side cost (handler accretion, read-path cruft) is currently undocumented beyond "you keep handling old topics."
 **Direction:** A first-class **migration/evolution guide**: the consumer-side patterns for (a) a one-time rewrite-forward (append a v2, stop emitting v1), (b) a shared mapper old→new applied at fold time, (c) when a true overwrite-migration is justified. The library may stay out of it, but the _guidance_ is missing and tech leads will ask for it before committing.

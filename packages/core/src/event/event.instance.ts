@@ -1,21 +1,30 @@
-// The event instance — a STANDALONE, fluent builder (contract C, ratified). It is what
-// `EventDef.create(payload)` returns: the consumer decorates it with `.creator()` /
-// `.headers()`, then an aggregate stamps its position + reference via `stage()` when it is
-// added (FOUNDATION §Events). The same instance type covers an
+// The event instance — a STANDALONE, fluent builder (contract C, ratified; versioned in
+// Epic 8). It is what `EventDef.create(payload)` returns: the consumer decorates it with
+// `.creator()` / `.headers()`, then an aggregate stamps its position + reference via
+// `stage()` when it is added (FOUNDATION §Events). The same instance type covers an
 // unstaged event (no position/aggregate yet), a staged event, and a rehydrated committed
 // event — they differ only in which fields are set.
 //
+// Versioning (FOUNDATION §"Versions & upcasters"). An instance retains its STORED payload
+// and STORED version ordinal; three reads diverge deliberately:
+//   • get.payload()/consume() → the payload UPCAST to head    (read-only; what consumers see)
+//   • build()                 → the STORED payload + ordinal   (faithful persistence; never upcast)
+//   • strip()                 → redact at the STORED version, re-validate, same ordinal
+// New events are born at head, so for them stored == head and no upcast runs.
+//
 // Functional mode (coding-style §5 / functional-dsl) — a closure over a `data` object,
-// not a class. Reads under `get`, the staging seam is `stage()`, terminal `build()`
-// validates at the boundary.
+// not a class. Reads under `get`, the staging seam is `stage()`, terminal `build()`/
+// `consume()` validate at the boundary.
 import { nanoid } from "nanoid";
-import type { ZodType } from "zod";
 import { EventEnvelopeV1 } from "./event.schema";
 import type { AggregateRefV1Type, CreatorSchemaV1Type, EventEnvelopeV1Type } from "./event.schema";
-import type { Stripper } from "./event";
+import type { VersionChain } from "./event";
+import { entryAt } from "./event";
+import { EventErrors } from "./event.errors";
 
 // A standalone event instance. Built by EventDefinition.create(), decorated fluently,
-// then handed to aggregate.events.add() which stages it.
+// then handed to aggregate.events.add() which stages it. `P` is the HEAD payload type —
+// what every consumer-facing read yields.
 export interface EventInstance<P = unknown> {
   // --- Consumer-facing fluent builders (pre-staging) ---
   // Provenance. REQUIRED before the event can be added to an aggregate — a missing
@@ -29,7 +38,12 @@ export interface EventInstance<P = unknown> {
   get: {
     id: () => string;
     topic: () => string;
+    // The HEAD-shape payload: the stored payload lifted through the upcast chain. This is
+    // what consumers meet; a malformed upcaster surfaces as EventErrors.UPCAST_INVALID.
     payload: () => P;
+    // The opaque stored ordinal — which version this event was written at. Diagnostics
+    // and persistence only; core never interprets it beyond counting from it.
+    version: () => number;
     created: () => string;
     // Staging fields — undefined until the event is added to an aggregate.
     position: () => number | undefined;
@@ -44,24 +58,35 @@ export interface EventInstance<P = unknown> {
   stage: (ref: AggregateRefV1Type, position: number) => EventInstance<P>;
 
   // --- Right-to-forget ---
-  // Apply the named stripper from this event's definition, returning a NEW instance with
-  // the same identity (id/position/topic/aggregate/creator/headers/created) and a redacted
-  // payload. No matching stripper → a new instance with the payload unchanged (a no-op),
-  // so an aggregate can strip every event uniformly. Pure; nothing mutated in place.
+  // Apply the named stripper from this event's STORED version, returning a NEW instance
+  // with the same identity (id/position/topic/aggregate/creator/headers/created) and
+  // STORED ordinal, and a redacted STORED payload. The redacted payload is re-validated
+  // against its own version's schema (invalid → EventErrors.STRIP_INVALID). No matching
+  // stripper → a new instance with the payload unchanged (a no-op), so an aggregate can
+  // strip every event uniformly. Pure; nothing mutated in place.
   strip: (context: string) => EventInstance<P>;
 
-  // Validate payload (against the definition schema) AND the whole envelope, then yield
-  // the finished fact. Throws if called before staging — an unstaged event has no
-  // position/aggregate/creator and cannot form a full envelope.
+  // Persistence envelope: validate the STORED payload against its version's schema AND the
+  // whole envelope, then yield the finished fact — payload and ordinal exactly as stored,
+  // never upcast. Throws if called before staging (no position/aggregate/creator).
   build: () => EventEnvelopeV1Type;
+
+  // Consumption envelope: the full envelope with the payload UPCAST to head — what the
+  // projection fold reads (mappers key off the head definition, so they require head shape).
+  // The stored ordinal is preserved in the envelope; only the payload is lifted.
+  consume: () => EventEnvelopeV1Type;
 }
 
 // The instance's mutable working state. The ONE sanctioned place to mutate (style
 // "Immutability") — internal builder state, copied on the way out via build()/strip().
-interface EventData<P> {
+// `payload` and `version` are the STORED pair; consumer reads derive head from them.
+// Payload is `unknown` internally (the chain is type-erased); the typed view `P` is
+// reattached by a single cast at the eventInstance()/…FromEnvelope() boundaries below.
+interface EventData {
   id: string;
   topic: string;
-  payload: P;
+  payload: unknown;
+  version: number;
   created: string;
   headers: Record<string, unknown>;
   position?: number;
@@ -69,16 +94,36 @@ interface EventData<P> {
   creator?: CreatorSchemaV1Type;
 }
 
+// Lift a STORED payload to head by applying each later version's upcast in order. Pure;
+// returns the stored payload unchanged when it is already at head (the new-event case).
+// A malformed upcast is a mechanical fault (UPCAST_INVALID), validated at the boundary.
+const toHead = (chain: VersionChain, version: number, stored: unknown): unknown => {
+  let payload = stored;
+  for (let index = version + 1; index < chain.length; index++) {
+    const entry = entryAt(chain, index);
+    try {
+      payload = entry.schema.parse(entry.upcast!(payload));
+    } catch (cause) {
+      throw new Error(EventErrors.UPCAST_INVALID, { cause });
+    }
+  }
+  return payload;
+};
+
 // The shared dsl assembly. Both fresh creation and envelope rehydration funnel here,
 // differing only in how `data` is seeded — so identity handling lives in one place.
-const make = <P>(schema: ZodType<P>, strippers: Map<string, Stripper<P>>, data: EventData<P>): EventInstance<P> => {
-  const dsl: EventInstance<P> = {
+// Internally untyped (EventInstance<unknown>); callers cast to the view type.
+const make = (chain: VersionChain, data: EventData): EventInstance<unknown> => {
+  const storedSchema = () => entryAt(chain, data.version).schema;
+  const headPayload = () => toHead(chain, data.version, data.payload);
+  const dsl: EventInstance<unknown> = {
     creator: (entity, uid) => ((data.creator = { entity, uid }), dsl),
     headers: (headers) => ((data.headers = headers), dsl),
     get: {
       id: () => data.id,
       topic: () => data.topic,
-      payload: () => data.payload,
+      payload: () => headPayload(),
+      version: () => data.version,
       created: () => data.created,
       position: () => data.position,
       aggregate: () => data.aggregate,
@@ -87,45 +132,52 @@ const make = <P>(schema: ZodType<P>, strippers: Map<string, Stripper<P>>, data: 
     },
     stage: (ref, position) => ((data.aggregate = ref), (data.position = position), dsl),
     strip: (context) => {
-      const stripper = strippers.get(context);
-      const payload = stripper ? stripper(data.payload) : data.payload;
-      // New instance, same identity/metadata, redacted payload. Never mutate in place.
-      return make(schema, strippers, { ...data, payload });
+      const stripper = entryAt(chain, data.version).strippers.get(context);
+      if (!stripper) return make(chain, { ...data }); // no-op: new instance, payload unchanged
+      const redacted = stripper(data.payload);
+      try {
+        storedSchema().parse(redacted); // redaction must stay valid for its own version
+      } catch (cause) {
+        throw new Error(EventErrors.STRIP_INVALID, { cause });
+      }
+      return make(chain, { ...data, payload: redacted });
     },
-    // Validate payload against the definition schema, then the whole envelope. An unstaged
-    // event fails here (position/aggregate/creator absent) — by design.
-    build: () => EventEnvelopeV1.parse({ ...data, payload: schema.parse(data.payload) }),
+    // STORED payload + ordinal, validated against the stored version's schema then the
+    // whole envelope. An unstaged event fails here (position/aggregate/creator absent).
+    build: () => EventEnvelopeV1.parse({ ...data, payload: storedSchema().parse(data.payload) }),
+    // HEAD payload (upcast + head-validated by toHead), stored ordinal preserved.
+    consume: () => EventEnvelopeV1.parse({ ...data, payload: headPayload() }),
   };
   return dsl;
 };
 
-// Fresh creation: mint id + created eagerly (captured as facts, never replayed); staging
-// fields stay unset until an aggregate assigns them. Behind EventDefinition.create().
-export const eventInstance = <P>(
-  topic: string,
-  schema: ZodType<P>,
-  strippers: Map<string, Stripper<P>>,
-  payload: P,
-): EventInstance<P> =>
-  make(schema, strippers, { id: nanoid(), topic, payload, created: new Date().toISOString(), headers: {} });
+// Fresh creation: an event is born at HEAD (the last version in the chain). Mint id +
+// created eagerly (captured as facts, never replayed); staging fields stay unset until an
+// aggregate assigns them. Behind EventDefinition.create() — payload is the head shape.
+export const eventInstance = <P>(topic: string, chain: VersionChain, payload: P): EventInstance<P> =>
+  make(chain, {
+    id: nanoid(),
+    topic,
+    payload,
+    version: chain.length - 1,
+    created: new Date().toISOString(),
+    headers: {},
+  }) as EventInstance<P>;
 
 // Rehydration from a complete, already-persisted envelope — behind EventDefinition.restore().
-// Mints NO new id/created: it carries the stored identity/metadata through, re-validating
-// both envelope and payload. The shared `strippers` map keeps a committed event strippable.
-export const eventInstanceFromEnvelope = <P>(
-  schema: ZodType<P>,
-  strippers: Map<string, Stripper<P>>,
-  envelope: EventEnvelopeV1Type,
-): EventInstance<P> => {
+// Mints NO new id/created: it carries the stored identity/metadata/ordinal through. The
+// stored payload is validated against ITS version's schema (envelope.version, default 0).
+export const eventInstanceFromEnvelope = <P>(chain: VersionChain, envelope: EventEnvelopeV1Type): EventInstance<P> => {
   const parsed = EventEnvelopeV1.parse(envelope);
-  return make(schema, strippers, {
+  return make(chain, {
     id: parsed.id,
     topic: parsed.topic,
-    payload: schema.parse(parsed.payload),
+    payload: entryAt(chain, parsed.version).schema.parse(parsed.payload),
+    version: parsed.version,
     created: parsed.created,
     headers: parsed.headers,
     position: parsed.position,
     aggregate: parsed.aggregate,
     creator: parsed.creator,
-  });
+  }) as EventInstance<P>;
 };

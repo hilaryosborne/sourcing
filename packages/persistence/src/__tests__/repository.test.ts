@@ -9,8 +9,8 @@ import { RepositoryErrors } from "../repository/repository.errors";
 import { StorageErrors } from "../storage/storage.errors";
 import { memoryStorage } from "./memory-storage";
 
-const Opened = event("counter.opened.v1", object({ name: string().min(1) }));
-const Incremented = event("counter.incremented.v1", object({ by: number().int().positive() }));
+const Opened = event("counter.opened.v1").version(object({ name: string().min(1) }));
+const Incremented = event("counter.incremented.v1").version(object({ by: number().int().positive() }));
 
 const Counter = aggregate("counter.v1");
 Counter.register(Opened);

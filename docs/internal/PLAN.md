@@ -122,6 +122,10 @@ This epic has two sub-layers. Keep them distinct — do not flatten the registry
 
 ---
 
+## Epic 8 — Event versioning & upcasters (separate plan)
+
+First-class, type-safe upcasters: an event declares an ordered version chain; persisted events carry an opaque ordinal; core upcasts to head on read; strippers are per-version. **Amends a ratified non-negotiable** (FOUNDATION's "topics are opaque" / no-upcasters rule) — so it owns a FOUNDATION-amendment gate before its contract gate. Full plan: **`PLAN-EVENT-VERSIONING.md`**.
+
 ## The gates, in one place
 
 1. **Epic 1:** style skill + tooling ratified before scaffold; examples deleted, never tracked.

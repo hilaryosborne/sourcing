@@ -34,8 +34,24 @@ This is what resolves where everything lives. Keep it in mind constantly.
   - **`creator` is required at staging; `headers` are optional.** Both are caller-supplied and opaque pass-through — core never interprets them. `creator` has no default: a permanent immutable event with bogus provenance is worse than one that refuses to be created, so a missing creator fails loudly. `headers` defaults to empty (decoration, genuinely optional). The asymmetry is deliberate — provenance on an immutable fact must not be guessable.
 - The **event definition** owns the payload schema. It is the only thing that deeply understands its own payload.
 - The library validates payloads against their schema. A payload that fails validation is a mechanical error — one of the few the library raises.
-- **Topics are opaque.** The library never parses them, never relates `file.create.v1` to `file.create.v2`. Versioning is a convention the user follows in the topic string; the library does not care.
+- **An event has an ordered version chain; core relates versions only by order, never by meaning.** An event definition has a stable base identity and an ordered list of versions — each owning a schema, named strippers, and (from the second version onward) an upcast. Each persisted event records an **opaque version ordinal**. Core never parses or understands what a version *means*; it counts position in the declared order and runs the user's pure functions — the same posture as projection reducers and strippers: **mechanism, not judgment**. *(Reverses the prior "topics are opaque / versioning is a naming convention" ruling — see PLAN-EVENT-VERSIONING.md.)*
 - **Topic uniqueness is local, never global.** There is no global topic registry and no cross-aggregate uniqueness — `file.create.v1` may legitimately live on many aggregates. A topic collision is an error only within a single scope: registering two event definitions for the same topic onto one aggregate definition, or two mappers for the same topic within one projection. Uniqueness is scoped to the definition that registers it.
+
+#### Versions & upcasters (read-time event evolution)
+
+An event evolves through an **ordered list of versions**, each `(schema, upcast?, strippers)`. Persisted events are written at whatever version was current and carry an **opaque version ordinal**; **upcasting never mutates them** (the only sanctioned mutation remains stripping).
+
+- **Upcast is forward and read-only.** At consumption — projection build and aggregate import — core runs a stored payload `vN → … → head` through the declared upcast chain, so consumers only ever see the head shape. Storage is untouched.
+- **The first version has no upcast** (nothing precedes it); **every later version must declare one**, transforming the previous version's output into its own. These are compile-time guarantees of the builder, not runtime checks.
+- **Strip is in-place and version-local.** Right-to-forget redacts the *as-stored* event, which lives at its write version — so each version owns its own named strippers, and strippers do **not** compose along the chain.
+- **Stripped output must be valid for its own version.** Core re-validates a stripper's output against that version's schema and raises a **mechanical error** on failure. Consequence: every stored event is always schema-valid for its version, so **upcasters are guaranteed valid inputs** — the strip and upcast chains decouple entirely.
+
+| | direction | touches storage? | composes to head? | re-validated? |
+|---|---|---|---|---|
+| **upcast** | forward (prev → this) | no | yes | input guaranteed valid |
+| **strip** | in-place (this → this) | yes (persistence overwrite) | no | yes — output vs own schema |
+
+*Deferred to the Phase-A contract gate, not settled here: whether the wire topic is the base string or base+ordinal, and the ordinal's concrete representation (index vs label) and how adapters carry it.*
 
 #### Strippers (the right-to-forget capability)
 
@@ -55,6 +71,8 @@ Events are *almost* immutable. The one sanctioned mutation is **stripping**, for
 - Strippers are named so they can be contextual — `'gdpr'`, `'export-redaction'`, `'support-view'`, whatever the consumer needs. Each is defined next to the event it redacts.
 - At the aggregate level, `aggregateInstance.strip('gdpr')` walks the events and, for each one whose definition has a matching named stripper, applies it — returning a **new aggregate** (or new event set) rather than mutating the existing aggregate in place.
 - **The result preserves identity, not object instances.** Each stripped event is a *new instance* carrying the same id, same position, same topic, and same metadata, with the redacted payload. Strippers are pure functions that return new payloads; nothing is mutated in place and no marker is appended. If PII survives in the produced events, the strip failed. That is the pass/fail test.
+- **Strippers are scoped per version.** A named stripper is registered on the version whose schema it redacts; right-to-forget applies the stripper matching each event's stored ordinal.
+- **A stripper's output is re-validated against its version's schema.** Redaction that produces an invalid payload is a mechanical error — strip to a schema-valid sentinel, not to a value the schema forbids.
 - **The library does not persist anything.** `strip` produces stripped events/state in memory. Whether storage then overwrites the originals is entirely the adapter's concern, and the core has no opinion on it. Erasure = strip → (consumer persists via the persistence layer) → rebuild projections. Only the strip is core's job.
 - The library does **not** append a "redaction happened" marker. If a consumer wants an audit trail of erasure, they emit their own event. That is a business concern, not ours.
 
@@ -187,5 +205,5 @@ The Mongo adapter requires a **transaction-capable deployment (replica set)** fo
 - Storage of any kind (it's the persistence layer's job).
 - Transport (Socket.IO, HTTP — the consumer wires these).
 - Domain event broadcasting (that is "Data on the Outside" — a separate concern; this library is "Data on the Inside").
-- Event versioning / upcasting / migration.
+- **Version *semantics* and byte migration.** Core applies the declared upcast chain *by order* and never interprets what a version means, infers upcasters, or rewrites stored bytes. (Declaring and applying upcasters is now IN scope — see *Versions & upcasters*.)
 - Ordering guarantees from anything other than its own stream.
