@@ -13,11 +13,10 @@ import { processor } from "../processor";
 import { memoryReadSide } from "../../__tests__/memory-readside";
 
 // --- A tiny order domain (one aggregate definition; many instances = many streams) ---
-const OrderPlaced = event(
-  "order.placed.v1",
+const OrderPlaced = event("order.placed.v1").version(
   object({ customer: string().min(1), total: number().int().nonnegative() }),
 );
-const OrderDelivered = event("order.delivered.v1", object({}));
+const OrderDelivered = event("order.delivered.v1").version(object({}));
 
 const Order = aggregate("order.v1");
 Order.register(OrderPlaced);
@@ -126,7 +125,7 @@ describe("cross-stream read model — folding rules", () => {
     const storage = memoryReadSide();
     const repo = repository({ storage });
     // A topic the read model does NOT handle also rides the firehose.
-    const Ignored = event("noise.happened.v1", object({}));
+    const Ignored = event("noise.happened.v1").version(object({}));
     const Noisy = aggregate("noise.v1");
     Noisy.register(Ignored);
     const noise = await repo.create(Noisy);
