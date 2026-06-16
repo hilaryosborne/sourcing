@@ -12,6 +12,13 @@ Talk is cheap. Here are complete, copy-pasteable builds — each one a real doma
 | [🗑️ Right-to-forget](/examples/gdpr-erasure)                   | **GDPR erasure**                 | Immutable history _and_ delete-my-data, reconciled — with proof no PII survives.      |
 | [🐘 Self-healing on Postgres](/examples/self-healing-postgres) | **Production storage**           | Persist, self-heal projections, handle conflicts, and wire up observability.          |
 
+## Which one looks like your problem?
+
+- **Evaluating the idea?** [🛒 Shopping cart](/examples/shopping-cart) — the whole philosophy in ~30 lines.
+- **Modelling something stateful?** [📦 Order fulfillment](/examples/order-fulfillment) — a lifecycle with a real guard.
+- **Need several views, or GDPR?** [📄 Document lifecycle](/examples/document-lifecycle) and [🗑️ Right-to-forget](/examples/gdpr-erasure).
+- **Going to production?** [🐘 Self-healing on Postgres](/examples/self-healing-postgres) — retries, concurrency, observability.
+
 ## How to read these
 
 Each example grows **one snippet at a time** — define events → register an aggregate → fold a projection → reach the payoff. No fragments, no "left as an exercise." If a block compiles in your head, it compiles in your editor.

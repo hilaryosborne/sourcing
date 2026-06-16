@@ -5,7 +5,7 @@ description: >-
   @hilaryosborne/sourcing-persistence + adapter packages — `repository({ storage })`, the
   repository surface (create/load/commit/rebuild/forget), configurable destinations, and the
   exact client-port wiring for Postgres, Mongo (replica set), and S3/MinIO. Use when a
-  consumer is moving from core-only to stored, self-healing projections (Scenario 2), choosing
+  consumer is moving from core-only to stored, self-healing projections, choosing
   a backend, wiring a real driver to an adapter, or implementing right-to-forget end to end.
   Assumes sourcing-concepts. Companions: using-aggregates, using-projections.
 ---
@@ -28,11 +28,11 @@ const repo = repository({ storage }); // storage is a StorageI from one of the a
 
 ```ts
 const opening = await repo.create(Account); // fresh instance (core mints the id)
-opening.events.add(AccountOpenedV1.create({ holder: "Ada" }).creator("user", "ada"));
+opening.events.add(AccountOpened.create({ holder: "Ada" }).creator("user", "ada"));
 await repo.commit(opening); // persist staged events, advance the head
 
 const account = await repo.load(Account, opening.id); // hydrate history into `committed`
-account.events.add(AccountDepositedV1.create({ amount: 100 }).creator("user", "ada"));
+account.events.add(AccountDeposited.create({ amount: 100 }).creator("user", "ada"));
 await repo.commit(account);
 
 const balance = await repo.rebuild({ aggregate: Account, id: opening.id, projection: Balance });

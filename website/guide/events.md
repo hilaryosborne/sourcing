@@ -8,10 +8,10 @@ An event is a **topic** + one or more **versioned payload schemas** (Zod). Defin
 import { event } from "@hilaryosborne/sourcing";
 import { object, string, number } from "zod";
 
-export const AccountOpenedV1 = event("account.opened.v1");
-AccountOpenedV1.version(1, object({ holder: string().min(1) }));
-export const AccountDepositedV1 = event("account.deposited.v1");
-AccountDepositedV1.version(1, object({ amount: number().int().positive() }));
+export const AccountOpened = event("account.opened");
+AccountOpened.version(1, object({ holder: string().min(1) }));
+export const AccountDeposited = event("account.deposited");
+AccountDeposited.version(1, object({ amount: number().int().positive() }));
 ```
 
 - `event(topic)` returns the **definition** (it carries `create`/`restore`/`version`); capture it in a `const`. `.version(n, schema)` declares a version **on** it — `n` is an explicit, 1-based, contiguous number that IS the persisted ordinal, and the call returns a per-version builder (for `.upcast`/`.strip`) whose return you usually discard. A single `.version(1, …)` is the common case — upcasters only matter once a shape changes.
@@ -22,7 +22,7 @@ AccountDepositedV1.version(1, object({ amount: number().int().positive() }));
 ## Create an instance (the fluent builder)
 
 ```ts
-const opened = AccountOpenedV1.create({ holder: "Ada" }) // validates the payload NOW (fail fast) — throws EventErrors.PAYLOAD_INVALID
+const opened = AccountOpened.create({ holder: "Ada" }) // validates the payload NOW (fail fast) — throws EventErrors.PAYLOAD_INVALID
   .creator("user", "ada") // REQUIRED: provenance { entity, uid }. No default.
   .headers({ source: "import" }); // OPTIONAL decoration, defaults to {}
 ```
@@ -56,12 +56,14 @@ AccountOpened.version(2, object({ holder: object({ name: string().min(1) }), cou
 - **The version rules are runtime mechanical faults:** `.upcast` on the first version → `UPCAST_ON_FIRST_VERSION`; a later version left without one → `UPCAST_MISSING` (at first use); a number that breaks the `1, 2, 3, …` sequence → `VERSION_SEQUENCE`.
 - **Mechanism, not judgment.** The library applies your ordered chain of pure functions by declared number; it never interprets what a version _means_. No migration engine, nothing rewritten on disk — the only new stored field is the opaque ordinal, which the library counts but never parses for meaning.
 
+> 📘 For schema-evolution strategy, the cost of long chains, and the "87 versions" question, see the [**Versioning & upcasters**](/guide/versioning) deep-dive.
+
 ## Strippers — right-to-forget, declared next to the event
 
 Only the event understands its payload, so redactions live with the version. A stripper is a **pure** function: payload in, redacted payload out — registered on the **version builder** that `.version()` returns (chainable, including after `.upcast`).
 
 ```ts
-AccountOpenedV1.version(1, object({ holder: string().min(1) }))
+AccountOpened.version(1, object({ holder: string().min(1) }))
   .strip("gdpr", (payload) => ({ ...payload, holder: "[redacted]" }))
   .strip("export-redaction", (payload) => ({ ...payload, holder: payload.holder[0] + "***" }));
 ```

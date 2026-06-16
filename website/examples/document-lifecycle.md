@@ -12,33 +12,33 @@ import { object, string, enum as zenum } from "zod";
 
 const Role = zenum(["viewer", "editor"]);
 
-export const FileCreatedV1 = event("file.created.v1");
-const fileCreatedV1 = FileCreatedV1.version(1, object({ name: string().min(1), owner: string().min(1) }));
-export const FileRenamedV1 = event("file.renamed.v1");
-FileRenamedV1.version(1, object({ name: string().min(1) }));
-export const FileSharedV1 = event("file.shared.v1");
-FileSharedV1.version(1, object({ withUser: string().min(1), role: Role }));
-export const FileAccessRevokedV1 = event("file.access-revoked.v1");
-FileAccessRevokedV1.version(1, object({ fromUser: string().min(1) }));
-export const FileArchivedV1 = event("file.archived.v1");
-FileArchivedV1.version(1, object({}));
+export const FileCreated = event("file.created");
+const fileCreatedV1 = FileCreated.version(1, object({ name: string().min(1), owner: string().min(1) }));
+export const FileRenamed = event("file.renamed");
+FileRenamed.version(1, object({ name: string().min(1) }));
+export const FileShared = event("file.shared");
+FileShared.version(1, object({ withUser: string().min(1), role: Role }));
+export const FileAccessRevoked = event("file.access-revoked");
+FileAccessRevoked.version(1, object({ fromUser: string().min(1) }));
+export const FileArchived = event("file.archived");
+FileArchived.version(1, object({}));
 ```
 
 `create()` validates each payload the instant you build it — a malformed fact never gets half-made. And `creator` is required: every fact below carries who made it.
 
 ## 📁 The aggregate
 
-One aggregate, `file.v1`, declaring exactly which topics are legal on its stream.
+One aggregate, `file`, declaring exactly which topics are legal on its stream.
 
 ```ts
 import { aggregate } from "@hilaryosborne/sourcing";
 
-export const File = aggregate("file.v1");
-File.register(FileCreatedV1);
-File.register(FileRenamedV1);
-File.register(FileSharedV1);
-File.register(FileAccessRevokedV1);
-File.register(FileArchivedV1);
+export const File = aggregate("file");
+File.register(FileCreated);
+File.register(FileRenamed);
+File.register(FileShared);
+File.register(FileAccessRevoked);
+File.register(FileArchived);
 ```
 
 ## ✍️ Write the document's life
@@ -48,12 +48,12 @@ Stage the facts, then commit. This is pure in-memory bookkeeping — core stores
 ```ts
 const doc = File.instance("doc-42"); // or omit the id and core mints a nanoid
 
-doc.events.add(FileCreatedV1.create({ name: "Q3 Plan.md", owner: "ada" }).creator("user", "ada"));
-doc.events.add(FileRenamedV1.create({ name: "Q3 Roadmap.md" }).creator("user", "ada"));
-doc.events.add(FileSharedV1.create({ withUser: "grace", role: "editor" }).creator("user", "ada"));
-doc.events.add(FileSharedV1.create({ withUser: "lin", role: "viewer" }).creator("user", "ada"));
-doc.events.add(FileAccessRevokedV1.create({ fromUser: "grace" }).creator("user", "ada"));
-doc.events.add(FileArchivedV1.create({}).creator("user", "ada"));
+doc.events.add(FileCreated.create({ name: "Q3 Plan.md", owner: "ada" }).creator("user", "ada"));
+doc.events.add(FileRenamed.create({ name: "Q3 Roadmap.md" }).creator("user", "ada"));
+doc.events.add(FileShared.create({ withUser: "grace", role: "editor" }).creator("user", "ada"));
+doc.events.add(FileShared.create({ withUser: "lin", role: "viewer" }).creator("user", "ada"));
+doc.events.add(FileAccessRevoked.create({ fromUser: "grace" }).creator("user", "ada"));
+doc.events.add(FileArchived.create({}).creator("user", "ada"));
 
 doc.events.commit(); // fold staged → committed (in memory)
 ```
@@ -68,56 +68,56 @@ A flat read model: what the file _is_ right now. The creating event establishes 
 import { projection } from "@hilaryosborne/sourcing";
 import { object, string, boolean } from "zod";
 
-const FileSummaryV1 = object({ name: string(), owner: string(), archived: boolean() });
+const FileSummarySchema = object({ name: string(), owner: string(), archived: boolean() });
 
-export const FileSummary = projection("projection.file-summary.v1", FileSummaryV1);
+export const FileSummary = projection("file-summary", FileSummarySchema);
 FileSummary.aggregate(File);
-FileSummary.handle<{ name: string; owner: string }>(FileCreatedV1, (current, e) => ({
+FileSummary.handle<{ name: string; owner: string }>(FileCreated, (current, e) => ({
   ...current,
   name: e.payload.name,
   owner: e.payload.owner,
   archived: false,
 }));
-FileSummary.handle<{ name: string }>(FileRenamedV1, (current, e) => ({ ...current, name: e.payload.name }));
-FileSummary.handle(FileArchivedV1, (current) => ({ ...current, archived: true }));
+FileSummary.handle<{ name: string }>(FileRenamed, (current, e) => ({ ...current, name: e.payload.name }));
+FileSummary.handle(FileArchived, (current) => ({ ...current, archived: true }));
 
 FileSummary.build(doc); // → { name: "Q3 Roadmap.md", owner: "ada", archived: true }
 ```
 
-Notice it never handles `file.shared.v1` or `file.access-revoked.v1` — **unmapped topics are simply skipped.** A projection only folds the events it cares about.
+Notice it never handles `file.shared` or `file.access-revoked` — **unmapped topics are simply skipped.** A projection only folds the events it cares about.
 
 ::: warning The first folded event establishes the shape
-Handlers receive a _complete_ `current: State`, never a `Partial` — that's what lets `FileRenamedV1` write `...current` without re-stating `owner` and `archived`. You uphold that contract by making the **creating event** (`file.created.v1`) return every field the schema requires. If the first event folded into a projection isn't a shape-establishing one, `build` throws `ProjectionErrors.OUTPUT_INVALID` — a runtime fault the types can't catch for you.
+Handlers receive a _complete_ `current: State`, never a `Partial` — that's what lets `FileRenamed` write `...current` without re-stating `owner` and `archived`. You uphold that contract by making the **creating event** (`file.created`) return every field the schema requires. If the first event folded into a projection isn't a shape-establishing one, `build` throws `ProjectionErrors.OUTPUT_INVALID` — a runtime fault the types can't catch for you.
 :::
 
 ## 🔐 Projection B — the access-control list
 
-Same stream, _entirely_ different model. This one **folds shares and revokes into a live map** of who currently has access and at what role. `file.shared.v1` writes a key; `file.access-revoked.v1` deletes one. The creating event seeds the owner with the highest role.
+Same stream, _entirely_ different model. This one **folds shares and revokes into a live map** of who currently has access and at what role. `file.shared` writes a key; `file.access-revoked` deletes one. The creating event seeds the owner with the highest role.
 
 ```ts
 import { projection } from "@hilaryosborne/sourcing";
 import { object, string, record, enum as zenum } from "zod";
 
-const AclV1 = object({ file: string(), collaborators: record(string(), zenum(["owner", "viewer", "editor"])) });
+const AclSchema = object({ file: string(), collaborators: record(string(), zenum(["owner", "viewer", "editor"])) });
 
-export const FileAcl = projection("projection.file-acl.v1", AclV1);
+export const FileAcl = projection("file-acl", AclSchema);
 FileAcl.aggregate(File);
 
 // creating event establishes the whole shape — including the owner as the first collaborator
-FileAcl.handle<{ name: string; owner: string }>(FileCreatedV1, (current, e) => ({
+FileAcl.handle<{ name: string; owner: string }>(FileCreated, (current, e) => ({
   ...current,
   file: e.payload.name,
   collaborators: { [e.payload.owner]: "owner" },
 }));
 
 // a share FOLDS a new entry into the derived map
-FileAcl.handle<{ withUser: string; role: "viewer" | "editor" }>(FileSharedV1, (current, e) => ({
+FileAcl.handle<{ withUser: string; role: "viewer" | "editor" }>(FileShared, (current, e) => ({
   ...current,
   collaborators: { ...current.collaborators, [e.payload.withUser]: e.payload.role },
 }));
 
 // a revoke FOLDS the entry back out
-FileAcl.handle<{ fromUser: string }>(FileAccessRevokedV1, (current, e) => {
+FileAcl.handle<{ fromUser: string }>(FileAccessRevoked, (current, e) => {
   const { [e.payload.fromUser]: _removed, ...remaining } = current.collaborators;
   return { ...current, collaborators: remaining };
 });
@@ -141,7 +141,7 @@ A summary card and an access matrix are different _questions_, so they're differ
 
 ## 🧽 A taste of right-to-forget
 
-Suppose `owner` is personal data you must be able to erase. The redaction lives _next to the event_ — only `file.created.v1` understands its own payload — as a named, pure stripper registered on that version's builder (the one its `.version(1, …)` returned):
+Suppose `owner` is personal data you must be able to erase. The redaction lives _next to the event_ — only `file.created` understands its own payload — as a named, pure stripper registered on that version's builder (the one its `.version(1, …)` returned):
 
 ```ts
 fileCreatedV1.strip("gdpr", (payload) => ({ ...payload, owner: "[redacted]" }));

@@ -12,8 +12,8 @@ Five things can happen to an order. Each is a topic (opaque, versioned string) a
 import { event } from "@hilaryosborne/sourcing";
 import { object, string, number, array } from "zod";
 
-export const OrderPlacedV1 = event("order.placed.v1");
-OrderPlacedV1.version(
+export const OrderPlaced = event("order.placed");
+OrderPlaced.version(
   1,
   object({
     items: array(object({ sku: string().min(1), qty: number().int().positive() })).min(1),
@@ -21,31 +21,31 @@ OrderPlacedV1.version(
   }),
 );
 
-export const OrderPaidV1 = event("order.paid.v1");
-OrderPaidV1.version(1, object({ amount: number().int().positive() }));
-export const OrderShippedV1 = event("order.shipped.v1");
-OrderShippedV1.version(1, object({ carrier: string().min(1), tracking: string().min(1) }));
-export const OrderDeliveredV1 = event("order.delivered.v1");
-OrderDeliveredV1.version(1, object({}));
-export const OrderCancelledV1 = event("order.cancelled.v1");
-OrderCancelledV1.version(1, object({ reason: string().min(1) }));
+export const OrderPaid = event("order.paid");
+OrderPaid.version(1, object({ amount: number().int().positive() }));
+export const OrderShipped = event("order.shipped");
+OrderShipped.version(1, object({ carrier: string().min(1), tracking: string().min(1) }));
+export const OrderDelivered = event("order.delivered");
+OrderDelivered.version(1, object({}));
+export const OrderCancelled = event("order.cancelled");
+OrderCancelled.version(1, object({ reason: string().min(1) }));
 ```
 
 `create()` validates the payload the instant you build a fact — a `total` of `0` throws `EventErrors.PAYLOAD_INVALID` right there, never half-formed downstream. When a payload shape needs to change, add a `.version(n, …)` + `.upcast()` to the event: stored facts are lifted to the latest shape at read, the version rules are enforced as runtime mechanical errors, and nothing is rewritten on disk. ([How versioning works →](/guide/events#versions-upcasters-evolving-a-payload))
 
 ## 🧱 The aggregate: a faithful container, not a rulebook
 
-The aggregate `order.v1` declares which topics are _legal_ on an order's stream. It enforces **no business rules** — it will happily stage a `shipped` before a `paid` if you ask it to. That freedom is exactly what makes the guard later _yours_.
+The aggregate `order` declares which topics are _legal_ on an order's stream. It enforces **no business rules** — it will happily stage a `shipped` before a `paid` if you ask it to. That freedom is exactly what makes the guard later _yours_.
 
 ```ts
 import { aggregate } from "@hilaryosborne/sourcing";
 
-export const Order = aggregate("order.v1");
-Order.register(OrderPlacedV1);
-Order.register(OrderPaidV1);
-Order.register(OrderShippedV1);
-Order.register(OrderDeliveredV1);
-Order.register(OrderCancelledV1);
+export const Order = aggregate("order");
+Order.register(OrderPlaced);
+Order.register(OrderPaid);
+Order.register(OrderShipped);
+Order.register(OrderDelivered);
+Order.register(OrderCancelled);
 ```
 
 That is the entire container. No state machine, no allowed-transitions table, no consistency boundary. The aggregate remembers facts in order; it does not judge them.
@@ -58,38 +58,38 @@ Here is the lifecycle made legible — an order-status projection. The **creatin
 import { projection } from "@hilaryosborne/sourcing";
 import { object, string, number, boolean, optional } from "zod";
 
-const OrderStatusV1 = object({
+const OrderStatusSchema = object({
   status: string(), // "placed" | "paid" | "shipped" | "delivered" | "cancelled"
   total: number(),
   paid: boolean(),
   tracking: optional(string()),
 });
 
-export const OrderStatus = projection("projection.order-status.v1", OrderStatusV1);
+export const OrderStatus = projection("order-status", OrderStatusSchema);
 OrderStatus.aggregate(Order);
 
 // The creating event seeds EVERY required field — this is the load-bearing rule.
-OrderStatus.handle<{ total: number }>(OrderPlacedV1, (current, e) => ({
+OrderStatus.handle<{ total: number }>(OrderPlaced, (current, e) => ({
   ...current,
   status: "placed",
   total: e.payload.total,
   paid: false,
 }));
 
-OrderStatus.handle(OrderPaidV1, (current) => ({ ...current, status: "paid", paid: true }));
-OrderStatus.handle<{ tracking: string }>(OrderShippedV1, (current, e) => ({
+OrderStatus.handle(OrderPaid, (current) => ({ ...current, status: "paid", paid: true }));
+OrderStatus.handle<{ tracking: string }>(OrderShipped, (current, e) => ({
   ...current,
   status: "shipped",
   tracking: e.payload.tracking,
 }));
-OrderStatus.handle(OrderDeliveredV1, (current) => ({ ...current, status: "delivered" }));
-OrderStatus.handle(OrderCancelledV1, (current) => ({ ...current, status: "cancelled" }));
+OrderStatus.handle(OrderDelivered, (current) => ({ ...current, status: "delivered" }));
+OrderStatus.handle(OrderCancelled, (current) => ({ ...current, status: "cancelled" }));
 ```
 
 `e.payload` is typed where we annotate the handler — `e.payload.total` on `placed`, `e.payload.tracking` on `shipped` — and runtime-validated against each event's schema regardless. Each handler advances `status` by one step. The whole lifecycle is right there, readable top to bottom.
 
 ::: tip Why the first handler is special
-Handlers receive a _complete_ `current: State`, not a `Partial` — that is what lets you write `current.total` without `| undefined` noise. You uphold it by making `order.placed.v1` return the full base. If the first folded event were a non-creating one, `build` would throw `ProjectionErrors.OUTPUT_INVALID` — a gap the types can't catch. Every stream starts with its `placed`; every other handler spreads `...current`.
+Handlers receive a _complete_ `current: State`, not a `Partial` — that is what lets you write `current.total` without `| undefined` noise. You uphold it by making `order.placed` return the full base. If the first folded event were a non-creating one, `build` would throw `ProjectionErrors.OUTPUT_INVALID` — a gap the types can't catch. Every stream starts with its `placed`; every other handler spreads `...current`.
 :::
 
 ## 🚚 Drive the happy path
@@ -99,15 +99,15 @@ No database, nothing to configure — fold the facts in memory and watch `status
 ```ts
 const order = Order.instance(); // core mints a nanoid id; pass your own to override
 
-order.events.add(OrderPlacedV1.create({ items: [{ sku: "BOOK-1", qty: 2 }], total: 4000 }).creator("user", "ada"));
-order.events.add(OrderPaidV1.create({ amount: 4000 }).creator("user", "ada"));
+order.events.add(OrderPlaced.create({ items: [{ sku: "BOOK-1", qty: 2 }], total: 4000 }).creator("user", "ada"));
+order.events.add(OrderPaid.create({ amount: 4000 }).creator("user", "ada"));
 order.events.commit();
 
 OrderStatus.build(order);
 // → { status: "paid", total: 4000, paid: true, tracking: undefined }
 
-order.events.add(OrderShippedV1.create({ carrier: "Royal Mail", tracking: "RM123" }).creator("system", "wms"));
-order.events.add(OrderDeliveredV1.create({}).creator("system", "wms"));
+order.events.add(OrderShipped.create({ carrier: "Royal Mail", tracking: "RM123" }).creator("system", "wms"));
+order.events.add(OrderDelivered.create({}).creator("system", "wms"));
 order.events.commit();
 
 OrderStatus.build(order);
@@ -123,7 +123,7 @@ The library has no opinion on lifecycle order. So how do you stop a `shipped` la
 ```ts
 function ship(order, carrier, tracking) {
   // Stage the proposed fact — provisional, NOT committed.
-  order.events.add(OrderShippedV1.create({ carrier, tracking }).creator("system", "wms"));
+  order.events.add(OrderShipped.create({ carrier, tracking }).creator("system", "wms"));
 
   // Ask the library: what WOULD the status be if this shipped?
   const wouldBe = OrderStatus.build(order); // folds committed ++ staged
@@ -142,7 +142,7 @@ Run it against an order that was placed but never paid:
 
 ```ts
 const unpaid = Order.instance();
-unpaid.events.add(OrderPlacedV1.create({ items: [{ sku: "BOOK-1", qty: 1 }], total: 2000 }).creator("user", "ada"));
+unpaid.events.add(OrderPlaced.create({ items: [{ sku: "BOOK-1", qty: 1 }], total: 2000 }).creator("user", "ada"));
 unpaid.events.commit();
 
 ship(unpaid, "Royal Mail", "RM999"); // throws: cannot ship: order is "placed", not paid
@@ -158,10 +158,10 @@ You did not build an audit log alongside the order. The order **is** its audit l
 ```ts
 order.events.export();
 // [
-//   { topic: "order.placed.v1",    payload: { items: [...], total: 4000 }, creator: { entity: "user",   uid: "ada" }, position: 0, ... },
-//   { topic: "order.paid.v1",      payload: { amount: 4000 },              creator: { entity: "user",   uid: "ada" }, position: 1, ... },
-//   { topic: "order.shipped.v1",   payload: { carrier: "Royal Mail", tracking: "RM123" }, creator: { entity: "system", uid: "wms" }, position: 2, ... },
-//   { topic: "order.delivered.v1", payload: {},                            creator: { entity: "system", uid: "wms" }, position: 3, ... },
+//   { topic: "order.placed",    payload: { items: [...], total: 4000 }, creator: { entity: "user",   uid: "ada" }, position: 0, ... },
+//   { topic: "order.paid",      payload: { amount: 4000 },              creator: { entity: "user",   uid: "ada" }, position: 1, ... },
+//   { topic: "order.shipped",   payload: { carrier: "Royal Mail", tracking: "RM123" }, creator: { entity: "system", uid: "wms" }, position: 2, ... },
+//   { topic: "order.delivered", payload: {},                            creator: { entity: "system", uid: "wms" }, position: 3, ... },
 // ]
 ```
 
@@ -170,7 +170,7 @@ Who placed it, who paid it, which system shipped it, when each happened — it i
 ## What you just saw
 
 - **An event stream models a process over time natively** — five facts (`placed → paid → shipped → delivered`, or `cancelled`) are the order's whole life, never a mutated row.
-- **The aggregate is a faithful container, not a rulebook.** `order.v1` enforces no lifecycle order; it remembers facts and stamps positions, nothing more.
+- **The aggregate is a faithful container, not a rulebook.** `order` enforces no lifecycle order; it remembers facts and stamps positions, nothing more.
 - **A projection turns the stream into a status read model**, the creating event seeding the shape and each handler advancing `status` by one step — with `e.payload` typed where the handler is annotated and runtime-validated throughout.
 - **Staged validation is where lifecycle rules live — in your code.** Stage `shipped`, build the would-be status, reject if `paid !== true`, and the unwanted fact evaporates. The library previews; you decide.
 - **The stream is the audit trail** — `export()` is the complete, provenanced order history, for free.

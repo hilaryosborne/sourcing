@@ -42,11 +42,56 @@ Event sourcing makes the audit log _the source of truth_ instead of an afterthou
 An audit log _describes_ changes to a state table that's still the source of truth — two things to keep in sync, and the table wins ties. Event sourcing makes the log _the_ source of truth and derives the table from it. There's nothing to keep in sync, because there's only one place the truth lives.
 :::
 
-## 🎯 Our take: mechanism, not judgment
+## 🗺️ Event sourcing is a field of opinions
 
-Here's where most event-sourcing libraries lose the plot — and where this one deliberately stops short.
+Now the honest part — the part most libraries skip. **There is no one event sourcing.** The three ideas above are the entire pattern, but the moment you go to build with them you walk into thirty years of accumulated opinion about _how_, and most of it arrives welded together as though it were the pattern itself.
 
-They ship a **framework**. A "decider" or command-handler layer that wants to own your business rules. A baked-in event store. Versioning buried in upcaster machinery that couples your read path to a migration history. You adopt the pattern and inherit an opinion about how your whole domain should be structured.
+Lay the takes out on a spectrum:
+
+- At one end, **append-and-fold.** Events are a way to store state. You write facts, you read them back as a projection, you stop there. Boring — in the way a good ORM is boring.
+- At the other end, **event sourcing as an entire architecture.** Commands and deciders. Aggregates as consistency boundaries enforcing invariants. CQRS with separate read and write stores. Asynchronous projections riding a message bus. Sagas and process managers. Eventually-consistent read models. Event-driven microservices broadcasting to one another. A worldview, adopted wholesale.
+
+Both call themselves "event sourcing." That conflation is the source of most of the confusion — and most of the bad first experiences. Someone reaches for the pattern to solve a _storage_ problem, and the ecosystem hands them an _architecture_. But the **storage pattern** (facts in, state out) and the **architecture** (how your whole system is shaped around those facts) are genuinely separable. Mistaking one for the other is how a small, sharp idea turns into a six-month migration.
+
+So which one are we? We're opinionated about that — and the rest of this page is us being honest about our opinion, and the trade-offs that come with it.
+
+## 🧰 Our take: it's an ORM, not an architecture
+
+Here's the thesis the rest of the library falls out of: **we treat event sourcing the way you treat an ORM.**
+
+An ORM has a narrow, honest job. It persists your objects to rows and reads them back as objects. It does _not_ tell you how to structure your domain, where to put your business rules, how to scale your reads, or how your services talk to each other. It is a _persistence mechanism_, and its restraint is exactly why you trust it with your data.
+
+This library is that, but for events. Its whole ambition is one sentence:
+
+> Persist a set of events to your data store, and fold them back into state when you read.
+
+That's the entire pitch. No worldview attached. The events live in your Postgres / Mongo / S3 right next to everything else you keep — synchronous, in-process, **no message bus, no separate read database, no eventual consistency** unless _you_ go and build it. You aren't adopting event-driven architecture. You're choosing how a few of your tables remember their past.
+
+This is a _position_, not a universal truth — and that distinction matters to us. If your problem genuinely is a distributed, high-throughput, read/write-asymmetric system, the full-architecture end of the spectrum exists for good reasons, and you should go there with our blessing. We've deliberately planted our flag at the boring end, because the boring end is where most applications actually live — and almost nobody building tools for them is honest about that.
+
+Everything distinctive below is downstream of this one decision.
+
+## 🤷 On CQRS (and why we shrug)
+
+The objection writes itself: _you can't talk about event sourcing without CQRS._ So let's talk about it — honestly, because it deserves an honest answer rather than a dismissal.
+
+**CQRS** — Command Query Responsibility Segregation — is the idea that the model you write through and the model you read through should be _different_ models: often different stores, often updated asynchronously. It pairs naturally with event sourcing — your events are the write model, your projections are the read model, and the two are free to drift apart in time.
+
+Where it genuinely pays off: lopsided read/write ratios, read and write paths that must scale independently, many different read shapes over one write model, systems that can happily tolerate a read model running a few hundred milliseconds stale. These are real problems, and CQRS is a real answer to them.
+
+Here's our nuance. We **do** separate the write model from the read model — events are written, projections are read, and a projection is unmistakably a query-side view. In that narrow sense the library is CQRS-flavoured and can't help being. What we **don't** do is _mandate_ the rest of it: no separate command stack, no asynchronous propagation, no message bus, no eventually-consistent read store you have to hold in your head. A projection is a synchronous fold you call when you want it; by default it is _exactly_ as fresh as the events you've written, because it's computed from them on the spot.
+
+So we shrug — not because CQRS is wrong, but because the heavyweight version of it is a _scaling_ tool, and scaling is a problem you should _have_ before you buy the machinery for it. If you need full CQRS, this library sits underneath it perfectly happily: your events and projections are right there to build asynchronous read models on top of. We just won't make you take on that complexity to store a fact. **Opt in when you have the problem; don't pay for it before.**
+
+::: tip There's a built-in escape hatch
+If you genuinely need a view that spans aggregates, the library ships an opt-in [cross-stream read model](/guide/read-models) — the firehose, folded into one denormalised view. It's deliberately past the line this page draws, and clearly marked as such — but it's there when you reach for it.
+:::
+
+## 🎯 Mechanism, not judgment
+
+The ORM stance has a sharp consequence, and it's the most important thing to understand before you write a line: **the library has no business logic, and refuses to grow any.**
+
+Most event-sourcing tools ship a **framework**: a "decider" or command-handler layer that wants to own your rules, a baked-in event store, versioning buried in machinery that couples your read path to a migration history. Adopt the pattern, inherit an opinion about how your whole domain should be structured — the architecture end of the spectrum, smuggled in as a default.
 
 This library is the opposite bet. It is a **mechanism**: a small set of primitives that record facts and derive state, and then get out of your way.
 
@@ -95,7 +140,7 @@ Honesty buys trust, so here's the bill:
 If you only ever need the latest value and will never ask "how did it get this way?", reach for a row in a table — it's simpler, and we'd rather you used it. Event sourcing earns its place when you need the **timeline**, **retroactive read models**, or a **hard audit trail**. The [FAQ has the decision checklist](/faq#do-i-actually-need-event-sourcing).
 
 ::: tip Can I adopt it incrementally?
-Yes. Scenarios 1 and 3 are **core only** — no database, no repository. You can fold events you already hold into a read model today, in one corner of your app, and add the persistence layer later if and when you want stored, self-healing projections. Nothing is all-or-nothing.
+Yes. The in-memory paths are **core only** — no database, no repository. You can fold events you already hold into a read model today, in one corner of your app, and add the persistence layer later if and when you want stored, self-healing projections. Nothing is all-or-nothing.
 :::
 
 ## ➡️ Next

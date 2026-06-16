@@ -27,7 +27,7 @@ Dependency flows one way: **adapter ← repository ← core**. Core never import
 
 ## Events: immutable, past-tense facts
 
-An event is a **topic** (an opaque, unique string like `account.opened.v1`) plus one or more **versioned payloads** (each validated by a Zod schema), plus metadata (id, position, version ordinal, aggregate ref, creator, headers, timestamp).
+An event is a **topic** (an opaque, unique string like `account.opened`) plus one or more **versioned payloads** (each validated by a Zod schema), plus metadata (id, position, version ordinal, aggregate ref, creator, headers, timestamp).
 
 - **An event evolves through an ordered version chain.** Each persisted event records an opaque **version ordinal**; at read the library walks it forward through your declared **upcasters** so consumers only ever see the latest shape. The topic string stays opaque — the library never parses it; it just applies the version chain you declared, by order. No migration engine, nothing rewritten on disk.
 - **Standalone.** An event definition is built on its own; the _same_ definition can be registered on many aggregates. Topic uniqueness is local (per aggregate, per projection), never global.
@@ -41,13 +41,13 @@ An aggregate holds one id's stream and keeps two sets apart:
 - **committed** — the durable history (what storage has).
 - **staged** — proposed events, not yet committed.
 
-This is the single most important structural fact in the library. **The aggregate enforces NO invariants** — no command layer, no rule-checking, no rejecting an event for being "not allowed." It is deliberately dumb. All judgment lives in your app. (Definition vs instance: a _definition_ — `aggregate("account.v1")` — knows which events are legal; an _instance_ is an id plus its stream.)
+This is the single most important structural fact in the library. **The aggregate enforces NO invariants** — no command layer, no rule-checking, no rejecting an event for being "not allowed." It is deliberately dumb. All judgment lives in your app. (Definition vs instance: a _definition_ — `aggregate("account")` — knows which events are legal; an _instance_ is an id plus its stream.)
 
 ## Projections: pure, disposable derivations
 
 A projection is a **pure builder**: a name + an output Zod schema + one handler per event topic. `build()` folds the events through the handlers and **validates the result against the schema on every build**. Projections hold no independent truth — bin them and rebuild any time.
 
-**The load-bearing contract — the first folded event establishes the shape.** There is no separate `initial` seed. Handlers are typed `(current: State, event) => State` — a _complete_ `current`, not a `Partial`. You keep that promise by seeding the full model in your _creating_ event (e.g. `*.opened.v1`). Break it — make a projection whose first folded event doesn't establish the whole shape — and you get a runtime validation error the types said couldn't happen. That sharp edge is the deliberate price of not writing `current.x | undefined` in every handler. (See using-projections for how to stay on the right side of it.)
+**The load-bearing contract — the first folded event establishes the shape.** There is no separate `initial` seed. Handlers are typed `(current: State, event) => State` — a _complete_ `current`, not a `Partial`. You keep that promise by seeding the full model in your _creating_ event (e.g. `*.opened`). Break it — make a projection whose first folded event doesn't establish the whole shape — and you get a runtime validation error the types said couldn't happen. That sharp edge is the deliberate price of not writing `current.x | undefined` in every handler. (See using-projections for how to stay on the right side of it.)
 
 ## Staged events: business validation without the library knowing what validation is
 
@@ -61,7 +61,7 @@ The library answers _"what would the state be?"_ Your app answers _"is this allo
 
 ## The repository & self-healing: where the cleverness lives
 
-Storage concepts (registry, projection store, the healing algorithm) live in the **persistence layer, never core** — because they _are_ storage concepts. The proof this is right: Scenarios 1 and 2 use the _same_ core builder; only _who fills the aggregate_ differs (you, vs the repository reading storage). Core can't tell them apart, and that is the point.
+Storage concepts (registry, projection store, the healing algorithm) live in the **persistence layer, never core** — because they _are_ storage concepts. The proof this is right: folding a projection from events you hold in memory and rebuilding one from storage use the _same_ core builder; only _who fills the aggregate_ differs (you, vs the repository reading storage). Core can't tell them apart, and that is the point.
 
 **Self-healing** is one cheap head read (`aggregate id → current head position`) deciding among three outcomes:
 
@@ -81,4 +81,4 @@ Out of scope, on purpose: business logic / invariant enforcement / commands; sto
 
 ## When NOT to reach for the persistence layer
 
-Scenarios 1 and 3 are **core only** — no database, no repository. If you just need to fold events you already hold (in memory, from a request, from your own query) into a read-model, install `@hilaryosborne/sourcing` alone. Add the repository only when you want events _stored_ and projections kept current for you.
+The in-memory paths are **core only** — no database, no repository. If you just need to fold events you already hold (in memory, from a request, from your own query) into a read-model, install `@hilaryosborne/sourcing` alone. Add the repository only when you want events _stored_ and projections kept current for you.
