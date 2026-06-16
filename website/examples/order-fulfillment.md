@@ -20,16 +20,16 @@ export const OrderPlacedV1 = event(
   }),
 );
 
-export const OrderPaidV1 = event("order.paid.v1", object({ amount: number().int().positive() }));
+export const OrderPaidV1 = event("order.paid.v1").version(object({ amount: number().int().positive() }));
 export const OrderShippedV1 = event(
   "order.shipped.v1",
   object({ carrier: string().min(1), tracking: string().min(1) }),
 );
-export const OrderDeliveredV1 = event("order.delivered.v1", object({}));
-export const OrderCancelledV1 = event("order.cancelled.v1", object({ reason: string().min(1) }));
+export const OrderDeliveredV1 = event("order.delivered.v1").version(object({}));
+export const OrderCancelledV1 = event("order.cancelled.v1").version(object({ reason: string().min(1) }));
 ```
 
-`create()` validates the payload the instant you build a fact — a `total` of `0` throws `EventErrors.PAYLOAD_INVALID` right there, never half-formed downstream. The `vN` suffix is a convention you own: a breaking change to `order.placed` is a new `order.placed.v2` topic, and the library will never relate the two for you. That is the point — versioning is your decision, written in the string.
+`create()` validates the payload the instant you build a fact — a `total` of `0` throws `EventErrors.PAYLOAD_INVALID` right there, never half-formed downstream. When a payload shape needs to change, add a `.version()` + `.upcast()` to the event: stored facts are lifted to the latest shape at read, the compiler forces you to write the mapper, and nothing is rewritten on disk. ([How versioning works →](/guide/events#versions-upcasters-evolving-a-payload))
 
 ## 🧱 The aggregate: a faithful container, not a rulebook
 

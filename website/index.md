@@ -48,9 +48,9 @@ No database, nothing to configure. This snippet runs as-is.
 import { event, aggregate, projection } from "@hilaryosborne/sourcing";
 import { object, string, number } from "zod";
 
-// 1 — events: a topic + a typed payload schema
-const AccountOpened = event("account.opened.v1", object({ holder: string().min(1) }));
-const Deposited = event("account.deposited.v1", object({ amount: number().int().positive() }));
+// 1 — events: a topic + a typed payload schema (declared as the first version)
+const AccountOpened = event("account.opened.v1").version(object({ holder: string().min(1) }));
+const Deposited = event("account.deposited.v1").version(object({ amount: number().int().positive() }));
 
 // 2 — an aggregate: a name + the events legal on its stream
 const Account = aggregate("account.v1");

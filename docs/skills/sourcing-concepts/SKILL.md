@@ -27,9 +27,9 @@ Dependency flows one way: **adapter ← repository ← core**. Core never import
 
 ## Events: immutable, past-tense facts
 
-An event is a **topic** (an opaque, unique string like `account.opened.v1`) plus a **payload** validated by a Zod schema, plus metadata (id, position, aggregate ref, creator, headers, timestamp).
+An event is a **topic** (an opaque, unique string like `account.opened.v1`) plus one or more **versioned payloads** (each validated by a Zod schema), plus metadata (id, position, version ordinal, aggregate ref, creator, headers, timestamp).
 
-- **Topics are opaque.** The library never parses them and never relates `.v1` to `.v2`. **Versioning is a convention you write into the string** — there are no upcasters, no migrations. A breaking change means a new topic.
+- **An event evolves through an ordered version chain.** Each persisted event records an opaque **version ordinal**; at read the library walks it forward through your declared **upcasters** so consumers only ever see the latest shape. The topic string stays opaque — the library never parses it; it just applies the version chain you declared, by order. No migration engine, nothing rewritten on disk.
 - **Standalone.** An event definition is built on its own; the _same_ definition can be registered on many aggregates. Topic uniqueness is local (per aggregate, per projection), never global.
 - **`id` at creation, `position` at staging.** Identity is intrinsic (a nanoid, minted when you `create()`). Position only means "index in this stream," so it is stamped when the event is staged onto an aggregate — and it is _provisional_ until committed.
 - **`creator` is required; `headers` optional.** Provenance on a permanent fact must not be guessable, so a missing creator fails loudly. Both are opaque pass-through — the library never interprets them.
@@ -77,7 +77,7 @@ End to end (the repository owns the sharp ordering): **load → strip → overwr
 
 ## What this library is deliberately NOT
 
-Out of scope, on purpose: business logic / invariant enforcement / commands; storage opinions in core; transport (HTTP/sockets); domain-event broadcasting ("data on the outside"); event versioning / upcasting / migration; any ordering guarantee beyond a single stream. If you reach for one of these, it lives in _your_ app or your adapter, not here.
+Out of scope, on purpose: business logic / invariant enforcement / commands; storage opinions in core; transport (HTTP/sockets); domain-event broadcasting ("data on the outside"); version _semantics_ & byte migration (the library applies your declared upcasters by order, but never interprets what a version means or rewrites stored bytes); any ordering guarantee beyond a single stream. If you reach for one of these, it lives in _your_ app or your adapter, not here.
 
 ## When NOT to reach for the persistence layer
 
