@@ -12,9 +12,13 @@ import { memoryStorage } from "../../__tests__/memory-storage";
 import { consoleObserver } from "../observer.console";
 import type { ErrorReport, HookEvent, Observer } from "../observer.interface";
 
-const Opened = event("account.opened.v1").version(object({ holder: string().min(1) }));
-const Deposited = event("account.deposited.v1").version(object({ amount: number().int().positive() }));
-Opened.strip("gdpr", (payload) => ({ ...payload, holder: "[redacted]" }));
+const Opened = event("account.opened.v1");
+Opened.version(1, object({ holder: string().min(1) })).strip("gdpr", (payload) => ({
+  ...payload,
+  holder: "[redacted]",
+}));
+const Deposited = event("account.deposited.v1");
+Deposited.version(1, object({ amount: number().int().positive() }));
 
 const Account = aggregate("account.v1");
 Account.register(Opened);
@@ -22,8 +26,11 @@ Account.register(Deposited);
 
 const Balance = projection("projection.balance.v1", object({ holder: string(), total: number() }));
 Balance.aggregate(Account);
-Balance.handle(Opened, (current, e) => ({ ...current, holder: e.payload.holder, total: 0 }));
-Balance.handle(Deposited, (current, e) => ({ ...current, total: current.total + e.payload.amount }));
+Balance.handle<{ holder: string }>(Opened, (current, e) => ({ ...current, holder: e.payload.holder, total: 0 }));
+Balance.handle<{ amount: number }>(Deposited, (current, e) => ({
+  ...current,
+  total: current.total + e.payload.amount,
+}));
 
 // A capturing observer: records every emission across all three channels.
 const capture = () => {

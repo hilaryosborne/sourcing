@@ -19,15 +19,19 @@ No, and no. Event sourcing is a _storage_ choice — how you persist state. CQRS
 Declare a new version on the event and an **upcaster** that lifts the previous shape into it:
 
 ```ts
-const AccountOpened = event("account.opened")
-  .version(object({ holder: string() }))
-  .version(object({ holder: object({ name: string() }), country: string() }))
-  .upcast((v1) => ({ holder: { name: v1.holder }, country: "unknown" }));
+const AccountOpened = event("account.opened");
+// version 1 — the original shape
+AccountOpened.version(1, object({ holder: string() }));
+// version 2 — a richer shape, plus the upcaster that lifts v1 into it
+AccountOpened.version(2, object({ holder: object({ name: string() }), country: string() })).upcast((prev) => {
+  const v1 = prev as { holder: string };
+  return { holder: { name: v1.holder }, country: "unknown" };
+});
 ```
 
-Stored events are **never rewritten**. Each records the ordinal it was written at, and at read time the library walks it forward through your upcasters so projections and aggregates only ever see the **latest** shape. The safeguard is the type system: add a version whose shape differs and the upcaster won't compile until you write it — and every projection mapper that reads the changed shape fails to compile until you fix it. No silent drift.
+Each version is declared on the event with an explicit, contiguous number — that number _is_ the ordinal stored on every event. Stored events are **never rewritten**. At read time the library walks each one forward through your upcasters so projections and aggregates only ever see the **latest** shape. The version rules are enforced as mechanical errors: the first version can't declare an upcaster, every later version must, and the numbers must run `1, 2, 3, …` — break any of these and you get a thrown error, not silent drift. (The upcaster's input is `unknown`, since the library can't thread the previous shape's type through separate `.version()` statements — narrow it against the schema you're lifting from; its return is checked against the new version's schema.)
 
-This is deliberately _not_ the heavy upcaster machinery of most frameworks. There's no migration engine, no version field for the library to parse, nothing rewritten on disk, and it's opt-in per event — a single `.version()` is the common case, and you never think about upcasters until a shape actually changes. The library still understands nothing about what a version _means_; it just applies the ordered chain of pure functions you declared. Versioning stays mechanism, not judgment. (Strippers are per-version too — erasure redacts each event in its own version's shape.)
+This is deliberately _not_ the heavy upcaster machinery of most frameworks. There's no migration engine, nothing rewritten on disk, and it's opt-in per event — a single `.version(1, …)` is the common case, and you never think about upcasters until a shape actually changes. The library still understands nothing about what a version _means_; it just applies the ordered chain of pure functions you declared. Versioning stays mechanism, not judgment. The only new stored field is the opaque version ordinal, which the library counts but never interprets for meaning. (Strippers are per-version too — erasure redacts each event in its own version's shape.)
 
 ## How are concurrent writes handled?
 

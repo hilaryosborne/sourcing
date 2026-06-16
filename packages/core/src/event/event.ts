@@ -1,17 +1,24 @@
 // The `event()` definition factory — the primary public primitive of the event layer
-// (contract C, ratified; versioned in Epic 8). A definition owns a base topic and an
-// ORDERED chain of versions, each with a payload schema, named strippers, and — from the
-// second version onward — an upcast (previous output → this output). It mints STANDALONE
-// instances via create() (always at the head version) and rehydrates committed ones via
-// restore() (at their stored ordinal). Events are not bound to any aggregate — the same
-// definition may be registered on many (FOUNDATION §Events: topic uniqueness is
-// per-aggregate, never global).
+// (contract C, ratified; versioned in Epic 8, DSL reshaped in the ref-exact pass). A
+// definition owns a base topic and an ORDERED chain of versions, each with a payload
+// schema, named strippers, and — from the second version onward — an upcast (previous
+// output → this output). It mints STANDALONE instances via create() (always at the head
+// version) and rehydrates committed ones via restore() (at their stored ordinal). Events
+// are not bound to any aggregate — the same definition may be registered on many
+// (FOUNDATION §Events: topic uniqueness is per-aggregate, never global).
 //
-// The builder is a TYPE-STATE machine that encodes three compile-time guarantees
-// (FOUNDATION §"Versions & upcasters"):
-//   1. the FIRST version cannot upcast      — version() → EventDefinition (no .upcast)
-//   2. every LATER version MUST upcast        — version() → VersionPending (ONLY .upcast reachable)
-//   3. an upcast's input IS the prev output   — VersionPending<Prev, Cur>.upcast((e: Prev) => Cur)
+// The DSL is REF-EXACT: the definition is captured once in a const and `.version()` is
+// called on it per version, the return usually discarded (registration is the call's side
+// effect). `.version(n, schema)` returns a per-version builder carrying `.upcast`/`.strip`,
+// scoped to THAT version. The declared number IS the persisted ordinal (1-based, contiguous).
+//
+// The three version invariants are RUNTIME-validated mechanical faults (FOUNDATION
+// §"Versions & upcasters" — runtime, not compile-time):
+//   1. .version(n) must continue the sequence    — n === count + 1, else VERSION_SEQUENCE
+//   2. the FIRST version cannot upcast            — .upcast on version 1 → UPCAST_ON_FIRST_VERSION
+//   3. every LATER version MUST upcast            — checked lazily at first use → UPCAST_MISSING
+// The upcast's INPUT is `unknown` (the handle does not thread the previous output type);
+// the upcast's RETURN and each version's strippers stay typed to that version's own schema.
 import type { ZodType } from "zod";
 import type { EventInstance } from "./event.instance";
 import type { EventEnvelopeV1Type } from "./event.schema";
@@ -28,8 +35,9 @@ type Output<S> = S extends ZodType<infer P> ? P : never;
 
 // One link in the version chain: its schema, its named strippers, and (absent on the first
 // version) the upcast that lifts the PREVIOUS version's output into this one. Payload-erased
-// internally; the typed builder surface is what enforces correctness. `version.length - 1`
-// is the head ordinal. Consumed by the instance to upcast / strip / build.
+// internally; the typed builder surface is what shapes the upcast return / strippers. The
+// chain is an array; a version's 1-based ordinal is `index + 1` (contiguous-from-1 makes the
+// mapping exact). Consumed by the instance to upcast / strip / build.
 export interface VersionEntry<P = unknown> {
   schema: ZodType<P>;
   upcast?: (previous: unknown) => unknown;
@@ -37,106 +45,104 @@ export interface VersionEntry<P = unknown> {
 }
 export type VersionChain = VersionEntry[];
 
-// The version at an ordinal, or a mechanical error if the chain does not declare it (a
-// stored ordinal beyond the known versions). Used by the instance and the builder so an
+// The version at a 1-based ordinal, or a mechanical error if the chain does not declare it
+// (a stored ordinal beyond the known versions). Used by the instance and the builder so an
 // out-of-range ordinal surfaces as VERSION_UNKNOWN rather than reading off the end.
 export const entryAt = (chain: VersionChain, version: number): VersionEntry => {
-  const entry = chain[version];
+  const entry = chain[version - 1];
   if (!entry) throw new Error(EventErrors.VERSION_UNKNOWN);
   return entry;
 };
 
-// The HEAD definition (the "complete" type-state). `P` is the head payload shape. Because
-// each chain step returns the next state, the value held after the final version()/upcast()
-// IS the head definition — no terminal call is needed (mirrors the prior flat factory).
-export interface EventDefinition<P = unknown> {
+// Lazily assert that every version after the first declares its mandatory upcast. Invoked
+// at first use (create / restore / consume / strip) — statement order means a later
+// version's upcast may be attached after the version is pushed, so it cannot be checked
+// when the version is added. A non-first entry without an upcast is an unusable definition.
+export const assertUpcastsPresent = (chain: VersionChain): void => {
+  for (let index = 1; index < chain.length; index++) {
+    if (!entryAt(chain, index + 1).upcast) throw new Error(EventErrors.UPCAST_MISSING);
+  }
+};
+
+// The event definition handle: a base topic over a shared, MUTATING version chain. Captured
+// once in a const; `.version()` is called on it per version, the return usually discarded.
+// NOT parameterized by head payload — the handle's type does not advance as versions are
+// added, so create()/restore() surface the payload as `unknown` (validated at runtime
+// against the head/stored schema by the instance).
+export interface EventDefinition {
   topic: string;
-  // Register a contextual stripper for the CURRENT (head) version's shape. Re-using a name
-  // on one version is a scope collision → EventErrors.STRIPPER_DUPLICATE.
-  strip: (context: string, stripper: Stripper<P>) => EventDefinition<P>;
-  // Add the NEXT version. Gates through VersionPending: its upcast is mandatory before the
-  // definition is usable again (create/restore/strip/version are unreachable until then).
-  version: <S extends ZodType>(schema: S) => VersionPending<P, Output<S>>;
-  // Build a STANDALONE event at the HEAD version: validate `payload` against the head
-  // schema, assign id + created eagerly, and return an unstaged instance ready for
-  // `.creator()` / `.headers()` and `aggregate.events.add()`.
-  create: (payload: P) => EventInstance<P>;
+  // Declare a version at an explicit 1-based contiguous ordinal — the number IS the
+  // persisted ordinal. Must equal (current count + 1): the first version is 1, each later
+  // version is the previous + 1. A wrong number (not 1 first, gap, duplicate, out of order)
+  // → EventErrors.VERSION_SEQUENCE. Returns a builder scoped to THIS version.
+  version: <S extends ZodType>(version: number, schema: S) => VersionBuilder<Output<S>>;
+  // Build a STANDALONE event at the HEAD version (highest declared number): validate
+  // `payload` against the head schema at runtime, assign id + created eagerly, and return an
+  // unstaged instance ready for `.creator()` / `.headers()` and `aggregate.events.add()`.
+  create: (payload: unknown) => EventInstance<unknown>;
   // Rehydrate an EventInstance from an already-persisted envelope at ITS stored ordinal,
   // re-validating the stored payload against that version's schema WITHOUT minting new
   // identity. This is what aggregate.events.import() uses so committed history stays
   // strippable/exportable; consumer reads still see the head shape (upcast).
-  restore: (envelope: EventEnvelopeV1Type) => EventInstance<P>;
+  restore: (envelope: EventEnvelopeV1Type) => EventInstance<unknown>;
 }
 
-// The "pending" type-state: a later version awaiting its MANDATORY upcast. The only method
-// is `.upcast`; nothing else is reachable until it is supplied, so a dangling Pending is an
-// unusable definition — which is how "every later version must upcast" is enforced.
-export interface VersionPending<Prev, Cur> {
-  // Input is the PREVIOUS version's output; the return is forced to THIS version's output.
-  upcast: (fn: (previous: Prev) => Cur) => EventDefinition<Cur>;
+// The per-version configuration builder, scoped to ONE version's entry. Both methods mutate
+// that entry and return `this` for chaining; order-independent (.upcast / .strip either way).
+export interface VersionBuilder<Cur> {
+  // Declare the upcast lifting the PREVIOUS version's output into this one. Input is
+  // `unknown` (the handle cannot thread the previous output type); the RETURN is forced to
+  // THIS version's shape (Cur), still checked against this version's schema. Declaring an
+  // upcast on the first version is a mechanical fault (UPCAST_ON_FIRST_VERSION).
+  upcast: (fn: (previous: unknown) => Cur) => VersionBuilder<Cur>;
+  // Register a named contextual stripper for THIS version's shape (FOUNDATION §Strippers).
+  // Input and output are this version's shape. Re-using a context on one version is a
+  // collision → EventErrors.STRIPPER_DUPLICATE.
+  strip: (context: string, stripper: (payload: Cur) => Cur) => VersionBuilder<Cur>;
 }
 
-// The no-version entry state: the base topic exists; only a first version may be added.
-export interface EventStart {
-  // The FIRST version routes straight to EventDefinition (which has NO .upcast member), so
-  // the first version structurally cannot declare one (nothing precedes it).
-  version: <S extends ZodType>(schema: S) => EventDefinition<Output<S>>;
-}
-
-// Assemble the head definition over a shared, growing chain. `head` is captured per state,
-// so create() always mints at THIS definition's head even if the chain grows later. Internals
-// are payload-erased; the typed interfaces above are the contract the casts honour.
-const complete = (topic: string, chain: VersionChain, head: number): EventDefinition => {
-  const definition: EventDefinition = {
-    topic,
+// Assemble the per-version builder over its own entry (already pushed to the shared chain).
+// `isFirst` marks version 1, the only one that may not upcast. Internally payload-erased;
+// the typed VersionBuilder<Cur> is the cast applied by version().
+const versionBuilder = (entry: VersionEntry, isFirst: boolean): VersionBuilder<unknown> => {
+  const builder: VersionBuilder<unknown> = {
+    upcast: (fn) => {
+      if (isFirst) throw new Error(EventErrors.UPCAST_ON_FIRST_VERSION);
+      entry.upcast = fn;
+      return builder;
+    },
     strip: (context, stripper) => {
-      const entry = entryAt(chain, head);
       if (entry.strippers.has(context)) throw new Error(EventErrors.STRIPPER_DUPLICATE);
       entry.strippers.set(context, stripper as Stripper);
-      return definition;
+      return builder;
     },
-    version: ((schema: ZodType) => pending(topic, chain, schema)) as EventDefinition["version"],
-    create: (payload) => eventInstance(topic, chain, parseOrThrow(entryAt(chain, head).schema, payload)),
-    restore: (envelope) => eventInstanceFromEnvelope(chain, envelope),
   };
-  return definition;
-};
-
-// The pending state: hold the next version's schema; commit it to the chain only when the
-// mandatory upcast arrives, then return the new head definition.
-const pending = (topic: string, chain: VersionChain, schema: ZodType): VersionPending<unknown, unknown> => ({
-  upcast: (fn) => {
-    chain.push({ schema, upcast: fn as (previous: unknown) => unknown, strippers: new Map() });
-    return complete(topic, chain, chain.length - 1);
-  },
-});
-
-// Validate a head payload at the create() boundary, tagging the mechanical fault and
-// preserving the ZodError on cause. restore()/build() parse against their version schemas
-// raw (the aggregate wraps a bad import as EVENT_INVALID); upcast/strip tag their own codes.
-const parseOrThrow = (schema: ZodType, payload: unknown): unknown => {
-  try {
-    return schema.parse(payload);
-  } catch (cause) {
-    throw new Error(EventErrors.PAYLOAD_INVALID, { cause });
-  }
+  return builder;
 };
 
 // event("account.opened")
-//   .version(z.object({ holder: z.string().min(1) }))
-//     .strip("gdpr", (p) => ({ holder: "[redacted]" }))
-//   .version(z.object({ holder: z.object({ name: z.string().min(1) }), category: z.string().min(1) }))
-//     .upcast((e) => ({ holder: { name: e.holder }, category: "unknown" }))
-//     .strip("gdpr", (p) => ({ holder: { name: "[redacted]" }, category: p.category }));
+//   ; const AccountOpened = … then per version, off the captured const:
+// AccountOpened.version(1, z.object({ holder: z.string().min(1) }))
+//   .strip("gdpr", () => ({ holder: "" }));
+// AccountOpened.version(2, z.object({ holder: z.object({ name: z.string().min(1) }), country: z.string().min(1) }))
+//   .upcast((prev) => ({ holder: { name: (prev as V1).holder }, country: "unknown" }))
+//   .strip("gdpr", (p) => ({ holder: { name: "" }, country: p.country }));
 // The three-way lockstep holds: filename ↔ base topic string ↔ exported symbol.
-const event = (topic: string): EventStart => {
+const event = (topic: string): EventDefinition => {
   const chain: VersionChain = [];
-  return {
-    version: ((schema: ZodType) => {
-      chain.push({ schema, strippers: new Map() });
-      return complete(topic, chain, chain.length - 1);
-    }) as EventStart["version"],
+  const definition: EventDefinition = {
+    topic,
+    version: ((version: number, schema: ZodType) => {
+      // The declared number IS the ordinal; it must continue the contiguous-from-1 sequence.
+      if (version !== chain.length + 1) throw new Error(EventErrors.VERSION_SEQUENCE);
+      const entry: VersionEntry = { schema, strippers: new Map() };
+      chain.push(entry);
+      return versionBuilder(entry, chain.length === 1);
+    }) as EventDefinition["version"],
+    create: (payload) => eventInstance(topic, chain, payload),
+    restore: (envelope) => eventInstanceFromEnvelope(chain, envelope),
   };
+  return definition;
 };
 
 export default event;

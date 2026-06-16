@@ -34,10 +34,12 @@ export interface ProjectionDefinition<State> {
   // Bind the aggregate this projection reads. handle() then validates that each event is
   // registered on it (else ProjectionErrors.EVENT_UNREGISTERED).
   aggregate: (definition: AggregateDefinition) => ProjectionDefinition<State>;
-  // Register a mapper for one event, keyed by the event DEFINITION (typed payload).
-  // Duplicate topic within one projection → TOPIC_DUPLICATE; a structurally malformed
-  // mapper → MAPPER_INVALID.
-  handle: <P>(event: EventDefinition<P>, mapper: ProjectionMapper<State, P>) => ProjectionDefinition<State>;
+  // Register a mapper for one event, keyed by the event DEFINITION. The event definition is
+  // no longer parameterized by payload (the ref-exact builder leaves the handle untyped), so
+  // the mapper's payload is `unknown` by default — narrow it by supplying the head payload
+  // type explicitly: `handle<FilePayload>(FileCreateV1, (cur, e) => …)`. Duplicate topic
+  // within one projection → TOPIC_DUPLICATE; a structurally malformed mapper → MAPPER_INVALID.
+  handle: <P = unknown>(event: EventDefinition, mapper: ProjectionMapper<State, P>) => ProjectionDefinition<State>;
   // Build the read-model by folding the aggregate's events (committed ++ staged, in
   // position order) through the handlers, validating against the model on every build.
   //   • Omit `from` → a full build. The CREATING event must establish the model's base

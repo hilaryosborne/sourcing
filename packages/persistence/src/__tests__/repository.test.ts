@@ -9,8 +9,10 @@ import { RepositoryErrors } from "../repository/repository.errors";
 import { StorageErrors } from "../storage/storage.errors";
 import { memoryStorage } from "./memory-storage";
 
-const Opened = event("counter.opened.v1").version(object({ name: string().min(1) }));
-const Incremented = event("counter.incremented.v1").version(object({ by: number().int().positive() }));
+const Opened = event("counter.opened.v1");
+Opened.version(1, object({ name: string().min(1) }));
+const Incremented = event("counter.incremented.v1");
+Incremented.version(1, object({ by: number().int().positive() }));
 
 const Counter = aggregate("counter.v1");
 Counter.register(Opened);
@@ -18,8 +20,11 @@ Counter.register(Incremented);
 
 const Total = projection("projection.total.v1", object({ name: string(), total: number() }));
 Total.aggregate(Counter);
-Total.handle(Opened, (current, event) => ({ ...current, name: event.payload.name, total: 0 }));
-Total.handle(Incremented, (current, event) => ({ ...current, total: current.total + event.payload.by }));
+Total.handle<{ name: string }>(Opened, (current, event) => ({ ...current, name: event.payload.name, total: 0 }));
+Total.handle<{ by: number }>(Incremented, (current, event) => ({
+  ...current,
+  total: current.total + event.payload.by,
+}));
 
 const stream = (id: string) => ({ id, name: "counter.v1" });
 

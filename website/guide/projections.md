@@ -14,14 +14,24 @@ const BalanceV1 = object({ holder: string(), balance: number() });
 
 export const Balance = projection("projection.balance.v1", BalanceV1);
 Balance.aggregate(Account); // bind the aggregate this projection reads
-Balance.handle(AccountOpenedV1, (current, e) => ({ ...current, holder: e.payload.holder, balance: 0 }));
-Balance.handle(AccountDepositedV1, (current, e) => ({ ...current, balance: current.balance + e.payload.amount }));
-Balance.handle(AccountWithdrawnV1, (current, e) => ({ ...current, balance: current.balance - e.payload.amount }));
+Balance.handle<{ holder: string }>(AccountOpenedV1, (current, e) => ({
+  ...current,
+  holder: e.payload.holder,
+  balance: 0,
+}));
+Balance.handle<{ amount: number }>(AccountDepositedV1, (current, e) => ({
+  ...current,
+  balance: current.balance + e.payload.amount,
+}));
+Balance.handle<{ amount: number }>(AccountWithdrawnV1, (current, e) => ({
+  ...current,
+  balance: current.balance - e.payload.amount,
+}));
 ```
 
 - `projection<State>(name, schema)` — the **name is the projection's identity in the projection store** (stored projections are keyed by it). Make it stable and unique.
 - `aggregate(def)` binds the aggregate; `handle` then rejects any event not registered on it (`ProjectionErrors.EVENT_UNREGISTERED`).
-- `handle(eventDef, mapper)` keys off the event **definition**, not a topic string — so `e.payload` is **fully typed** to that event's schema. The mapper is `(current: State, event: TypedEvent<P>) => State`. Registering two handlers for one topic throws `ProjectionErrors.TOPIC_DUPLICATE`.
+- `handle(eventDef, mapper)` keys off the event **definition**, not a topic string. `e.payload` is `unknown` unless you annotate the handler — `handle<P>(eventDef, mapper)` types `e.payload` to `P`; either way the payload is runtime-validated against its schema. The mapper is `(current: State, event) => State`. Registering two handlers for one topic throws `ProjectionErrors.TOPIC_DUPLICATE`.
 
 See [Events](/guide/events) and [Aggregates](/guide/aggregates) for the definitions a projection reads.
 
@@ -51,7 +61,11 @@ There is **no separate `initial` seed.** Handlers are typed with a _complete_ `c
 
 ```ts
 // ✅ the creating handler establishes EVERY field the schema requires
-Balance.handle(AccountOpenedV1, (current, e) => ({ ...current, holder: e.payload.holder, balance: 0 }));
+Balance.handle<{ holder: string }>(AccountOpenedV1, (current, e) => ({
+  ...current,
+  holder: e.payload.holder,
+  balance: 0,
+}));
 ```
 
 Break the promise and you get a runtime error the types couldn't catch:
@@ -59,7 +73,7 @@ Break the promise and you get a runtime error the types couldn't catch:
 ```ts
 // ❌ a projection whose first folded event is a non-creating event
 const bad = projection("projection.bad.v1", BalanceV1).aggregate(Account);
-bad.handle(AccountWithdrawnV1, (c, e) => ({ ...c, balance: c.balance - e.payload.amount }));
+bad.handle<{ amount: number }>(AccountWithdrawnV1, (c, e) => ({ ...c, balance: c.balance - e.payload.amount }));
 const a = Account.instance();
 a.events.add(AccountWithdrawnV1.create({ amount: 5 }).creator("user", "x"));
 bad.build(a); // throws ProjectionErrors.OUTPUT_INVALID — `holder` was never established

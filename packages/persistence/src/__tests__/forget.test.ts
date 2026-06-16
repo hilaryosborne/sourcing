@@ -12,9 +12,13 @@ import { memoryStorage } from "./memory-storage";
 const PII = "alice@example.com";
 
 // A user domain with PII (the email on registration) and a non-PII rename.
-const UserRegisteredV1 = event("user.registered.v1").version(object({ email: string().min(1) }));
-UserRegisteredV1.strip("gdpr", (payload) => ({ ...payload, email: "[redacted]" }));
-const UserRenamedV1 = event("user.renamed.v1").version(object({ handle: string().min(1) }));
+const UserRegisteredV1 = event("user.registered.v1");
+UserRegisteredV1.version(1, object({ email: string().min(1) })).strip("gdpr", (payload) => ({
+  ...payload,
+  email: "[redacted]",
+}));
+const UserRenamedV1 = event("user.renamed.v1");
+UserRenamedV1.version(1, object({ handle: string().min(1) }));
 
 const User = aggregate("user.v1");
 User.register(UserRegisteredV1);
@@ -22,8 +26,12 @@ User.register(UserRenamedV1);
 
 const Profile = projection("projection.profile.v1", object({ email: string(), handle: string() }));
 Profile.aggregate(User);
-Profile.handle(UserRegisteredV1, (current, event) => ({ ...current, email: event.payload.email, handle: "" }));
-Profile.handle(UserRenamedV1, (current, event) => ({ ...current, handle: event.payload.handle }));
+Profile.handle<{ email: string }>(UserRegisteredV1, (current, event) => ({
+  ...current,
+  email: event.payload.email,
+  handle: "",
+}));
+Profile.handle<{ handle: string }>(UserRenamedV1, (current, event) => ({ ...current, handle: event.payload.handle }));
 
 const userStream = (id: string) => ({ id, name: "user.v1" });
 

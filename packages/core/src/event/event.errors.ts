@@ -26,4 +26,20 @@ export enum EventErrors {
   // chain was shortened). Core counts from the ordinal and cannot find that version — a
   // mechanical fault, surfaced rather than read off the end of the chain.
   VERSION_UNKNOWN = "EVENT_VERSION_UNKNOWN",
+
+  // A version() call declared an ordinal that breaks the contiguous-from-1 sequence: the
+  // first version was not 1, a later version was not (previous + 1), or a number was
+  // duplicated / out of order. The declared number IS the persisted ordinal, so the
+  // sequence must be exact — a gap or duplicate is a mechanical authoring fault.
+  VERSION_SEQUENCE = "EVENT_VERSION_SEQUENCE",
+
+  // .upcast() was declared on the FIRST version. Nothing precedes version 1, so it has
+  // nothing to lift from — a mechanical authoring fault, raised at the call site.
+  UPCAST_ON_FIRST_VERSION = "EVENT_UPCAST_ON_FIRST_VERSION",
+
+  // A version after the first was declared without the mandatory upcast that lifts the
+  // previous version's output into its own. Validated lazily at first use (create /
+  // restore / consume / strip), because statement order means it cannot be known when the
+  // version is added. A later version without an upcast is an unusable definition.
+  UPCAST_MISSING = "EVENT_UPCAST_MISSING",
 }

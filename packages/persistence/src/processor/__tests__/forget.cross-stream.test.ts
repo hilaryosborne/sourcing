@@ -13,10 +13,12 @@ import { memoryReadSide } from "../../__tests__/memory-readside";
 
 const PII = "ada@example.com";
 
-const OrderPlaced = event("order.placed.v1").version(
+type Placed = { customer: string; email: string; total: number };
+const OrderPlaced = event("order.placed.v1");
+OrderPlaced.version(
+  1,
   object({ customer: string().min(1), email: string().min(1), total: number().int().nonnegative() }),
-);
-OrderPlaced.strip("gdpr", (payload) => ({ ...payload, email: "[redacted]", customer: "[redacted]" }));
+).strip("gdpr", (payload) => ({ ...payload, email: "[redacted]", customer: "[redacted]" }));
 
 const Order = aggregate("order.v1");
 Order.register(OrderPlaced);
@@ -24,7 +26,7 @@ Order.register(OrderPlaced);
 // A cross-stream read model that DERIVES the PII into its own state (keyed by order id).
 const OrdersV1 = object({ rows: record(string(), object({ email: string(), total: number() })) });
 const makeOrders = () =>
-  readModel("readmodel.orders.v1", OrdersV1, { rows: {} }).on(OrderPlaced, (state, e) => ({
+  readModel("readmodel.orders.v1", OrdersV1, { rows: {} }).on<Placed>(OrderPlaced, (state, e) => ({
     rows: { ...state.rows, [e.aggregate.id]: { email: e.payload.email, total: e.payload.total } },
   }));
 

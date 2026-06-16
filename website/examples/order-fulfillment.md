@@ -12,24 +12,26 @@ Five things can happen to an order. Each is a topic (opaque, versioned string) a
 import { event } from "@hilaryosborne/sourcing";
 import { object, string, number, array } from "zod";
 
-export const OrderPlacedV1 = event(
-  "order.placed.v1",
+export const OrderPlacedV1 = event("order.placed.v1");
+OrderPlacedV1.version(
+  1,
   object({
     items: array(object({ sku: string().min(1), qty: number().int().positive() })).min(1),
     total: number().int().positive(),
   }),
 );
 
-export const OrderPaidV1 = event("order.paid.v1").version(object({ amount: number().int().positive() }));
-export const OrderShippedV1 = event(
-  "order.shipped.v1",
-  object({ carrier: string().min(1), tracking: string().min(1) }),
-);
-export const OrderDeliveredV1 = event("order.delivered.v1").version(object({}));
-export const OrderCancelledV1 = event("order.cancelled.v1").version(object({ reason: string().min(1) }));
+export const OrderPaidV1 = event("order.paid.v1");
+OrderPaidV1.version(1, object({ amount: number().int().positive() }));
+export const OrderShippedV1 = event("order.shipped.v1");
+OrderShippedV1.version(1, object({ carrier: string().min(1), tracking: string().min(1) }));
+export const OrderDeliveredV1 = event("order.delivered.v1");
+OrderDeliveredV1.version(1, object({}));
+export const OrderCancelledV1 = event("order.cancelled.v1");
+OrderCancelledV1.version(1, object({ reason: string().min(1) }));
 ```
 
-`create()` validates the payload the instant you build a fact — a `total` of `0` throws `EventErrors.PAYLOAD_INVALID` right there, never half-formed downstream. When a payload shape needs to change, add a `.version()` + `.upcast()` to the event: stored facts are lifted to the latest shape at read, the compiler forces you to write the mapper, and nothing is rewritten on disk. ([How versioning works →](/guide/events#versions-upcasters-evolving-a-payload))
+`create()` validates the payload the instant you build a fact — a `total` of `0` throws `EventErrors.PAYLOAD_INVALID` right there, never half-formed downstream. When a payload shape needs to change, add a `.version(n, …)` + `.upcast()` to the event: stored facts are lifted to the latest shape at read, the version rules are enforced as runtime mechanical errors, and nothing is rewritten on disk. ([How versioning works →](/guide/events#versions-upcasters-evolving-a-payload))
 
 ## 🧱 The aggregate: a faithful container, not a rulebook
 
@@ -67,7 +69,7 @@ export const OrderStatus = projection("projection.order-status.v1", OrderStatusV
 OrderStatus.aggregate(Order);
 
 // The creating event seeds EVERY required field — this is the load-bearing rule.
-OrderStatus.handle(OrderPlacedV1, (current, e) => ({
+OrderStatus.handle<{ total: number }>(OrderPlacedV1, (current, e) => ({
   ...current,
   status: "placed",
   total: e.payload.total,
@@ -75,12 +77,16 @@ OrderStatus.handle(OrderPlacedV1, (current, e) => ({
 }));
 
 OrderStatus.handle(OrderPaidV1, (current) => ({ ...current, status: "paid", paid: true }));
-OrderStatus.handle(OrderShippedV1, (current, e) => ({ ...current, status: "shipped", tracking: e.payload.tracking }));
+OrderStatus.handle<{ tracking: string }>(OrderShippedV1, (current, e) => ({
+  ...current,
+  status: "shipped",
+  tracking: e.payload.tracking,
+}));
 OrderStatus.handle(OrderDeliveredV1, (current) => ({ ...current, status: "delivered" }));
 OrderStatus.handle(OrderCancelledV1, (current) => ({ ...current, status: "cancelled" }));
 ```
 
-`e.payload` is fully typed from each event's schema — `e.payload.total` on `placed`, `e.payload.tracking` on `shipped`, no casts. Each handler advances `status` by one step. The whole lifecycle is right there, readable top to bottom.
+`e.payload` is typed where we annotate the handler — `e.payload.total` on `placed`, `e.payload.tracking` on `shipped` — and runtime-validated against each event's schema regardless. Each handler advances `status` by one step. The whole lifecycle is right there, readable top to bottom.
 
 ::: tip Why the first handler is special
 Handlers receive a _complete_ `current: State`, not a `Partial` — that is what lets you write `current.total` without `| undefined` noise. You uphold it by making `order.placed.v1` return the full base. If the first folded event were a non-creating one, `build` would throw `ProjectionErrors.OUTPUT_INVALID` — a gap the types can't catch. Every stream starts with its `placed`; every other handler spreads `...current`.
@@ -165,7 +171,7 @@ Who placed it, who paid it, which system shipped it, when each happened — it i
 
 - **An event stream models a process over time natively** — five facts (`placed → paid → shipped → delivered`, or `cancelled`) are the order's whole life, never a mutated row.
 - **The aggregate is a faithful container, not a rulebook.** `order.v1` enforces no lifecycle order; it remembers facts and stamps positions, nothing more.
-- **A projection turns the stream into a status read model**, the creating event seeding the shape and each handler advancing `status` by one step — with `e.payload` fully typed throughout.
+- **A projection turns the stream into a status read model**, the creating event seeding the shape and each handler advancing `status` by one step — with `e.payload` typed where the handler is annotated and runtime-validated throughout.
 - **Staged validation is where lifecycle rules live — in your code.** Stage `shipped`, build the would-be status, reject if `paid !== true`, and the unwanted fact evaporates. The library previews; you decide.
 - **The stream is the audit trail** — `export()` is the complete, provenanced order history, for free.
 

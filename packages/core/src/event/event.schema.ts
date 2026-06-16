@@ -40,12 +40,13 @@ export const EventEnvelopeV1 = object({
   // Opaque unique string (e.g. "file.create.v1"). Core never parses or relates it.
   topic: string().min(1),
 
-  // The OPAQUE version ordinal: which version this event was written at, 0-based. Core
-  // never interprets it beyond counting forward from it through the upcast chain at read
-  // (FOUNDATION §"Versions & upcasters"). Defaults to 0 so single-version events and any
-  // event persisted before this field existed rehydrate as the first version — the field
-  // is additive, and every adapter (which stores the whole envelope) carries it verbatim.
-  version: number().int().min(0).default(0),
+  // The OPAQUE version ordinal: which version this event was written at — the declared
+  // 1-based contiguous version number, NOT an array index. Core never interprets it beyond
+  // counting forward from it through the upcast chain at read (FOUNDATION §"Versions &
+  // upcasters"). Defaults to 1 so single-version events and any event persisted before this
+  // field existed rehydrate as the first version — the field is additive, and every adapter
+  // (which stores the whole envelope) carries it verbatim.
+  version: number().int().min(1).default(1),
 
   // Single, stream-local index within this aggregate's stream. Provisional at
   // staging; 0-based. Cross-stream/global sequence is the repository's concern, not here.

@@ -12,13 +12,16 @@ import { object, string, enum as zenum } from "zod";
 
 const Role = zenum(["viewer", "editor"]);
 
-export const FileCreatedV1 = event("file.created.v1").version(
-  object({ name: string().min(1), owner: string().min(1) }),
-);
-export const FileRenamedV1 = event("file.renamed.v1").version(object({ name: string().min(1) }));
-export const FileSharedV1 = event("file.shared.v1").version(object({ withUser: string().min(1), role: Role }));
-export const FileAccessRevokedV1 = event("file.access-revoked.v1").version(object({ fromUser: string().min(1) }));
-export const FileArchivedV1 = event("file.archived.v1").version(object({}));
+export const FileCreatedV1 = event("file.created.v1");
+const fileCreatedV1 = FileCreatedV1.version(1, object({ name: string().min(1), owner: string().min(1) }));
+export const FileRenamedV1 = event("file.renamed.v1");
+FileRenamedV1.version(1, object({ name: string().min(1) }));
+export const FileSharedV1 = event("file.shared.v1");
+FileSharedV1.version(1, object({ withUser: string().min(1), role: Role }));
+export const FileAccessRevokedV1 = event("file.access-revoked.v1");
+FileAccessRevokedV1.version(1, object({ fromUser: string().min(1) }));
+export const FileArchivedV1 = event("file.archived.v1");
+FileArchivedV1.version(1, object({}));
 ```
 
 `create()` validates each payload the instant you build it — a malformed fact never gets half-made. And `creator` is required: every fact below carries who made it.
@@ -69,13 +72,13 @@ const FileSummaryV1 = object({ name: string(), owner: string(), archived: boolea
 
 export const FileSummary = projection("projection.file-summary.v1", FileSummaryV1);
 FileSummary.aggregate(File);
-FileSummary.handle(FileCreatedV1, (current, e) => ({
+FileSummary.handle<{ name: string; owner: string }>(FileCreatedV1, (current, e) => ({
   ...current,
   name: e.payload.name,
   owner: e.payload.owner,
   archived: false,
 }));
-FileSummary.handle(FileRenamedV1, (current, e) => ({ ...current, name: e.payload.name }));
+FileSummary.handle<{ name: string }>(FileRenamedV1, (current, e) => ({ ...current, name: e.payload.name }));
 FileSummary.handle(FileArchivedV1, (current) => ({ ...current, archived: true }));
 
 FileSummary.build(doc); // → { name: "Q3 Roadmap.md", owner: "ada", archived: true }
@@ -101,20 +104,20 @@ export const FileAcl = projection("projection.file-acl.v1", AclV1);
 FileAcl.aggregate(File);
 
 // creating event establishes the whole shape — including the owner as the first collaborator
-FileAcl.handle(FileCreatedV1, (current, e) => ({
+FileAcl.handle<{ name: string; owner: string }>(FileCreatedV1, (current, e) => ({
   ...current,
   file: e.payload.name,
   collaborators: { [e.payload.owner]: "owner" },
 }));
 
 // a share FOLDS a new entry into the derived map
-FileAcl.handle(FileSharedV1, (current, e) => ({
+FileAcl.handle<{ withUser: string; role: "viewer" | "editor" }>(FileSharedV1, (current, e) => ({
   ...current,
   collaborators: { ...current.collaborators, [e.payload.withUser]: e.payload.role },
 }));
 
 // a revoke FOLDS the entry back out
-FileAcl.handle(FileAccessRevokedV1, (current, e) => {
+FileAcl.handle<{ fromUser: string }>(FileAccessRevokedV1, (current, e) => {
   const { [e.payload.fromUser]: _removed, ...remaining } = current.collaborators;
   return { ...current, collaborators: remaining };
 });
@@ -138,10 +141,10 @@ A summary card and an access matrix are different _questions_, so they're differ
 
 ## 🧽 A taste of right-to-forget
 
-Suppose `owner` is personal data you must be able to erase. The redaction lives _next to the event_ — only `file.created.v1` understands its own payload — as a named, pure stripper:
+Suppose `owner` is personal data you must be able to erase. The redaction lives _next to the event_ — only `file.created.v1` understands its own payload — as a named, pure stripper registered on that version's builder (the one its `.version(1, …)` returned):
 
 ```ts
-FileCreatedV1.strip("gdpr", (payload) => ({ ...payload, owner: "[redacted]" }));
+fileCreatedV1.strip("gdpr", (payload) => ({ ...payload, owner: "[redacted]" }));
 
 const forgotten = doc.strip("gdpr"); // a NEW aggregate — nothing mutated in place
 FileSummary.build(forgotten); // → { name: "Q3 Roadmap.md", owner: "[redacted]", archived: true }

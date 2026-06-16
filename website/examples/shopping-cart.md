@@ -20,20 +20,24 @@ A cart's whole life is four facts. Each event is a **topic** (an opaque, version
 import { event } from "@hilaryosborne/sourcing";
 import { object, string, number } from "zod";
 
-const CartOpened = event("cart.opened.v1").version(object({ shopper: string().min(1) }));
-const ItemAdded = event(
-  "cart.item-added.v1",
+const CartOpened = event("cart.opened.v1");
+CartOpened.version(1, object({ shopper: string().min(1) }));
+const ItemAdded = event("cart.item-added.v1");
+ItemAdded.version(
+  1,
   object({
     sku: string().min(1),
     qty: number().int().positive(),
     price: number().int().nonnegative(), // minor units (pennies) — integers, no float drift
   }),
 );
-const ItemRemoved = event("cart.item-removed.v1").version(object({ sku: string().min(1) }));
-const CheckedOut = event("cart.checked-out.v1").version(object({}));
+const ItemRemoved = event("cart.item-removed.v1");
+ItemRemoved.version(1, object({ sku: string().min(1) }));
+const CheckedOut = event("cart.checked-out.v1");
+CheckedOut.version(1, object({}));
 ```
 
-The topic is yours to name. When `cart.item-added`'s payload shape needs to change, add a `.version()` + `.upcast()` so old events lift to the latest shape at read — the compiler forces every mapper, and nothing is rewritten on disk. ([How versioning works →](/guide/events#versions-upcasters-evolving-a-payload))
+The topic is yours to name. When `cart.item-added`'s payload shape needs to change, add a `.version(n, …)` + `.upcast()` so old events lift to the latest shape at read — the version rules are enforced as runtime mechanical errors, and nothing is rewritten on disk. ([How versioning works →](/guide/events#versions-upcasters-evolving-a-payload))
 
 ## 🛍️ The aggregate
 
@@ -70,7 +74,7 @@ const CartSummary = projection("projection.cart.v1", CartSummaryV1);
 CartSummary.aggregate(Cart); // bind the aggregate this projection reads
 
 // The CREATING event establishes the WHOLE shape — every field the schema requires.
-CartSummary.handle(CartOpened, (current, e) => ({
+CartSummary.handle<{ shopper: string }>(CartOpened, (current, e) => ({
   ...current,
   shopper: e.payload.shopper,
   items: {},
@@ -79,7 +83,7 @@ CartSummary.handle(CartOpened, (current, e) => ({
 }));
 
 // Every other handler spreads ...current and changes only what it owns.
-CartSummary.handle(ItemAdded, (current, e) => {
+CartSummary.handle<{ sku: string; qty: number; price: number }>(ItemAdded, (current, e) => {
   const items = { ...current.items, [e.payload.sku]: (current.items[e.payload.sku] ?? 0) + e.payload.qty };
   return {
     ...current,
@@ -89,13 +93,13 @@ CartSummary.handle(ItemAdded, (current, e) => {
   };
 });
 
-CartSummary.handle(ItemRemoved, (current, e) => {
+CartSummary.handle<{ sku: string }>(ItemRemoved, (current, e) => {
   const { [e.payload.sku]: _gone, ...items } = current.items;
   return { ...current, items, lineCount: Object.keys(items).length };
 });
 ```
 
-Notice `e.payload` is fully typed inside each handler — `handle` keys off the event _definition_, not a topic string, so you get `e.payload.sku` and `e.payload.price` with no casts. (And we simply don't handle `CheckedOut` in the summary — unmapped topics are tolerated; `build` folds what it has handlers for and skips the rest.)
+Notice `e.payload` is typed inside each handler because we annotate it — `handle<P>` keys off the event _definition_, not a topic string, so `e.payload.sku` and `e.payload.price` are typed and runtime-validated against the schema. (And we simply don't handle `CheckedOut` in the summary — unmapped topics are tolerated; `build` folds what it has handlers for and skips the rest.)
 
 ::: warning The first folded event establishes the shape
 Handlers receive a _complete_ `current: State`, never a `Partial` — that's what lets you write `current.subtotal` without `| undefined` everywhere. You uphold the bargain by making your **creating event** (`cart.opened.v1`) return every required field. If the first folded event were a non-creating one, the model would be missing fields and `build` throws `ProjectionErrors.OUTPUT_INVALID` — a runtime error the types can't catch. Rule of thumb: every stream opens with `*.opened`; every other handler spreads `...current`.
