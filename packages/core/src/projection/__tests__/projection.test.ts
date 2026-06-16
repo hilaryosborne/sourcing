@@ -34,7 +34,11 @@ describe("projection", () => {
 
   it("handle() rejects a duplicate topic within one projection", () => {
     const view = projection("projection.dup.v1", FileModelV1);
-    view.handle(FileCreateV1, (c, e) => ({ ...c, name: e.payload.name, owner: e.payload.owner }));
+    view.handle<{ name: string; owner: string }>(FileCreateV1, (c, e) => ({
+      ...c,
+      name: e.payload.name,
+      owner: e.payload.owner,
+    }));
     expect(() => view.handle(FileCreateV1, (c) => c)).toThrow(ProjectionErrors.TOPIC_DUPLICATE);
   });
 
@@ -52,7 +56,11 @@ describe("projection", () => {
 
   it("build() tolerates an unmapped topic — it folds the rest", () => {
     const view = projection("projection.partial.v1", FileModelV1).aggregate(FileAggregate);
-    view.handle(FileCreateV1, (c, e) => ({ ...c, name: e.payload.name, owner: e.payload.owner }));
+    view.handle<{ name: string; owner: string }>(FileCreateV1, (c, e) => ({
+      ...c,
+      name: e.payload.name,
+      owner: e.payload.owner,
+    }));
     // FileRenameV1 is unmapped here → ignored, the created state stands.
     expect(view.build(withCreateAndRename())).toEqual({ name: "draft.txt", owner: "Alice" });
   });
@@ -61,7 +69,7 @@ describe("projection", () => {
     // The sharp edge of the State-not-Partial contract: a projection whose only handler is
     // a non-creating event produces an incomplete model → OUTPUT_INVALID, by design.
     const view = projection("projection.shapeless.v1", FileModelV1).aggregate(FileAggregate);
-    view.handle(FileRenameV1, (c, e) => ({ ...c, name: e.payload.name }));
+    view.handle<{ name: string }>(FileRenameV1, (c, e) => ({ ...c, name: e.payload.name }));
     const file = FileAggregate.instance("file-1");
     file.events.add(FileRenameV1.create({ name: "x.txt" }).creator("user", "u1"));
     expect(() => view.build(file)).toThrow(ProjectionErrors.OUTPUT_INVALID);

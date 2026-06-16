@@ -13,10 +13,11 @@ import { processor } from "../processor";
 import { memoryReadSide } from "../../__tests__/memory-readside";
 
 // --- A tiny order domain (one aggregate definition; many instances = many streams) ---
-const OrderPlaced = event("order.placed.v1").version(
-  object({ customer: string().min(1), total: number().int().nonnegative() }),
-);
-const OrderDelivered = event("order.delivered.v1").version(object({}));
+type Placed = { customer: string; total: number };
+const OrderPlaced = event("order.placed.v1");
+OrderPlaced.version(1, object({ customer: string().min(1), total: number().int().nonnegative() }));
+const OrderDelivered = event("order.delivered.v1");
+OrderDelivered.version(1, object({}));
 
 const Order = aggregate("order.v1");
 Order.register(OrderPlaced);
@@ -27,7 +28,7 @@ const OpenOrdersV1 = object({ open: record(string(), number()), total: number() 
 const makeOpenOrders = () =>
   readModel("readmodel.open-orders.v1", OpenOrdersV1, { open: {}, total: 0 })
     // `e.aggregate.id` is WHICH order — that's how a cross-stream view keys its rows.
-    .on(OrderPlaced, (state, e) => {
+    .on<Placed>(OrderPlaced, (state, e) => {
       const open = { ...state.open, [e.aggregate.id]: e.payload.total };
       return { open, total: Object.values(open).reduce((a, b) => a + b, 0) };
     })
@@ -125,7 +126,8 @@ describe("cross-stream read model — folding rules", () => {
     const storage = memoryReadSide();
     const repo = repository({ storage });
     // A topic the read model does NOT handle also rides the firehose.
-    const Ignored = event("noise.happened.v1").version(object({}));
+    const Ignored = event("noise.happened.v1");
+    Ignored.version(1, object({}));
     const Noisy = aggregate("noise.v1");
     Noisy.register(Ignored);
     const noise = await repo.create(Noisy);
@@ -156,7 +158,7 @@ describe("readModel — mechanical errors", () => {
     const repo = repository({ storage });
     await placeOrder(repo, "ada", 100);
     // total typed as a string by a buggy handler → fails the number() schema.
-    const broken = readModel("readmodel.broken.v1", OpenOrdersV1, { open: {}, total: 0 }).on(
+    const broken = readModel("readmodel.broken.v1", OpenOrdersV1, { open: {}, total: 0 }).on<Placed>(
       OrderPlaced,
       (state, e) => ({ ...state, open: { ...state.open, [e.aggregate.id]: e.payload.total }, total: "nope" as never }),
     );

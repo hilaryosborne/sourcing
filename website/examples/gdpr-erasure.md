@@ -13,8 +13,9 @@ import { event } from "@hilaryosborne/sourcing";
 import { object, string } from "zod";
 
 // The creating event. `email` and `fullName` are the PII — this is what erasure must reach.
-export const UserRegisteredV1 = event(
-  "user.registered.v1",
+export const UserRegisteredV1 = event("user.registered.v1");
+const userRegisteredV1 = UserRegisteredV1.version(
+  1,
   object({
     email: string().email(),
     fullName: string().min(1),
@@ -23,7 +24,8 @@ export const UserRegisteredV1 = event(
 );
 
 // A later fact. `handle` is a public display name — NOT PII. It must survive erasure untouched.
-export const UserRenamedV1 = event("user.renamed.v1").version(object({ handle: string().min(1) }));
+export const UserRenamedV1 = event("user.renamed.v1");
+UserRenamedV1.version(1, object({ handle: string().min(1) }));
 ```
 
 `create()` validates the payload the instant you build a fact — a malformed `email` throws `EventErrors.PAYLOAD_INVALID` right there, never half-formed downstream.
@@ -33,8 +35,9 @@ export const UserRenamedV1 = event("user.renamed.v1").version(object({ handle: s
 Only the event understands its own payload, so the redaction belongs next to the definition, not in some central erasure service that has to know every schema. A stripper is a **pure** function: payload in, redacted payload out.
 
 ```ts
-// Registered on the PII-bearing event. Named so you can have several contexts.
-UserRegisteredV1.strip("gdpr", (payload) => ({
+// Registered on the PII-bearing version (the builder its `.version(1, …)` returned).
+// Named so you can have several contexts.
+userRegisteredV1.strip("gdpr", (payload) => ({
   ...payload,
   email: "[redacted]",
   fullName: "[redacted]",
@@ -42,11 +45,11 @@ UserRegisteredV1.strip("gdpr", (payload) => ({
 }));
 ```
 
-- `strip(context, fn)` registers a **named** stripper and returns the definition, so it chains. You can register several (`"gdpr"`, `"support-view"`, …); each is its own redaction.
+- `strip(context, fn)` registers a **named** stripper on that version's builder and returns it, so it chains. You can register several (`"gdpr"`, `"support-view"`, …); each is its own redaction. The stripper's input/output are typed to that version's schema.
 - We register **nothing** on `user.renamed.v1`. Events with no matching stripper pass through untouched — that is how `handle` survives while `email` and `fullName` do not.
 
 ::: warning The test of a correct stripper is blunt
-No PII survives the produced payload. Return a **new** object; never mutate the input. Registering two strippers under one context name on one definition throws `EventErrors.STRIPPER_DUPLICATE`.
+No PII survives the produced payload. Return a **new** object; never mutate the input. Registering two strippers under one context name on one version throws `EventErrors.STRIPPER_DUPLICATE`.
 :::
 
 ## 🧱 The aggregate and the read model
@@ -70,16 +73,16 @@ export const Profile = projection("projection.profile.v1", ProfileV1);
 Profile.aggregate(User);
 
 // The creating event establishes EVERY required field — the load-bearing rule.
-Profile.handle(UserRegisteredV1, (current, e) => ({
+Profile.handle<{ email: string; handle: string }>(UserRegisteredV1, (current, e) => ({
   ...current,
   email: e.payload.email,
   handle: e.payload.handle,
 }));
 
-Profile.handle(UserRenamedV1, (current, e) => ({ ...current, handle: e.payload.handle }));
+Profile.handle<{ handle: string }>(UserRenamedV1, (current, e) => ({ ...current, handle: e.payload.handle }));
 ```
 
-`e.payload` is fully typed from each event's schema — `e.payload.email` on registration, `e.payload.handle` on rename, no casts.
+`e.payload` is typed where we annotate the handler (`handle<P>`) — `e.payload.email` on registration, `e.payload.handle` on rename — and runtime-validated against each event's schema regardless.
 
 ## 🧬 Path one — pure core: `strip` → `export`
 

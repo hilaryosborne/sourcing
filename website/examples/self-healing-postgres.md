@@ -13,8 +13,10 @@ import { event, aggregate, projection } from "@hilaryosborne/sourcing";
 import { object, string, number } from "zod";
 
 // Events: an opaque versioned topic + a Zod payload schema. create() validates eagerly.
-const CounterOpened = event("counter.opened.v1").version(object({ name: string().min(1) }));
-const CounterIncremented = event("counter.incremented.v1").version(object({ by: number().int().positive() }));
+const CounterOpened = event("counter.opened.v1");
+CounterOpened.version(1, object({ name: string().min(1) }));
+const CounterIncremented = event("counter.incremented.v1");
+CounterIncremented.version(1, object({ by: number().int().positive() }));
 
 // Aggregate: a name + the events legal on its stream.
 const Counter = aggregate("counter.v1");
@@ -25,11 +27,11 @@ Counter.register(CounterIncremented);
 // every other handler spreads ...current. (Projections have no initial seed — see the note.)
 const Total = projection("projection.total.v1", object({ name: string(), total: number() }));
 Total.aggregate(Counter);
-Total.handle(CounterOpened, (current, e) => ({ ...current, name: e.payload.name, total: 0 }));
-Total.handle(CounterIncremented, (current, e) => ({ ...current, total: current.total + e.payload.by }));
+Total.handle<{ name: string }>(CounterOpened, (current, e) => ({ ...current, name: e.payload.name, total: 0 }));
+Total.handle<{ by: number }>(CounterIncremented, (current, e) => ({ ...current, total: current.total + e.payload.by }));
 ```
 
-That's the entire domain. `e.payload` is fully typed from each event's schema — no casts. Now we make it durable.
+That's the entire domain. `e.payload` is typed where we annotate the handler (`handle<P>`) and runtime-validated against each event's schema. Now we make it durable.
 
 ## 🔌 Wire the Postgres adapter
 

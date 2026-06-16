@@ -49,8 +49,10 @@ import { event, aggregate, projection } from "@hilaryosborne/sourcing";
 import { object, string, number } from "zod";
 
 // 1 — events: a topic + a typed payload schema (declared as the first version)
-const AccountOpened = event("account.opened.v1").version(object({ holder: string().min(1) }));
-const Deposited = event("account.deposited.v1").version(object({ amount: number().int().positive() }));
+const AccountOpened = event("account.opened.v1");
+AccountOpened.version(1, object({ holder: string().min(1) }));
+const Deposited = event("account.deposited.v1");
+Deposited.version(1, object({ amount: number().int().positive() }));
 
 // 2 — an aggregate: a name + the events legal on its stream
 const Account = aggregate("account.v1");
@@ -60,8 +62,8 @@ Account.register(Deposited);
 // 3 — a projection: a name, an output schema, one handler per event
 const Balance = projection("projection.balance.v1", object({ holder: string(), balance: number() }));
 Balance.aggregate(Account);
-Balance.handle(AccountOpened, (s, e) => ({ ...s, holder: e.payload.holder, balance: 0 }));
-Balance.handle(Deposited, (s, e) => ({ ...s, balance: s.balance + e.payload.amount }));
+Balance.handle<{ holder: string }>(AccountOpened, (s, e) => ({ ...s, holder: e.payload.holder, balance: 0 }));
+Balance.handle<{ amount: number }>(Deposited, (s, e) => ({ ...s, balance: s.balance + e.payload.amount }));
 
 // fold some facts — nothing is stored, this is pure
 const account = Account.instance();

@@ -35,9 +35,11 @@ Three primitives, three steps. This snippet runs as-is — no database, nothing 
 import { event, aggregate, projection } from "@hilaryosborne/sourcing";
 import { object, string, number } from "zod";
 
-// 1 — Events: a topic (opaque, versioned string) + a Zod payload schema.
-const AccountOpened = event("account.opened.v1").version(object({ holder: string().min(1) }));
-const Deposited = event("account.deposited.v1").version(object({ amount: number().int().positive() }));
+// 1 — Events: a topic (opaque, versioned string) + a Zod payload schema, declared as the first version.
+const AccountOpened = event("account.opened.v1");
+AccountOpened.version(1, object({ holder: string().min(1) }));
+const Deposited = event("account.deposited.v1");
+Deposited.version(1, object({ amount: number().int().positive() }));
 
 // 2 — An aggregate: a name + the events that are legal on its stream.
 const Account = aggregate("account.v1");
@@ -45,11 +47,18 @@ Account.register(AccountOpened);
 Account.register(Deposited);
 
 // 3 — A projection: a name, an output schema, and one handler per event.
-//     `e.payload` is fully typed from the event's schema — no casts.
+//     Annotate the payload type on handle() to type `e.payload`; it's runtime-validated either way.
 const Balance = projection("projection.balance.v1", object({ holder: string(), balance: number() }));
 Balance.aggregate(Account);
-Balance.handle(AccountOpened, (current, e) => ({ ...current, holder: e.payload.holder, balance: 0 }));
-Balance.handle(Deposited, (current, e) => ({ ...current, balance: current.balance + e.payload.amount }));
+Balance.handle<{ holder: string }>(AccountOpened, (current, e) => ({
+  ...current,
+  holder: e.payload.holder,
+  balance: 0,
+}));
+Balance.handle<{ amount: number }>(Deposited, (current, e) => ({
+  ...current,
+  balance: current.balance + e.payload.amount,
+}));
 
 // Build some facts and fold them. Nothing is stored — this is pure, in-memory.
 const account = Account.instance(); // core mints a nanoid id; pass your own to override

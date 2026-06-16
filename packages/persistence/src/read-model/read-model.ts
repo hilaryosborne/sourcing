@@ -27,9 +27,12 @@ export interface ReadModelDefinition<State> {
   schema: ZodType<State>;
   // The seed. Unlike a projection, a cross-stream read model is seeded explicitly (see header).
   initial: State;
-  // Register a handler for one event, keyed by the event DEFINITION (so the payload stays typed).
-  // Duplicate topic → TOPIC_DUPLICATE; a structurally malformed handler → MAPPER_INVALID.
-  on: <P>(event: EventDefinition<P>, handler: ReadModelHandler<State, P>) => ReadModelDefinition<State>;
+  // Register a handler for one event, keyed by the event DEFINITION. The event definition is
+  // no longer parameterized by payload (the ref-exact builder leaves the handle untyped), so
+  // the handler's payload is `unknown` by default — narrow it by supplying the head payload
+  // type explicitly: `on<OrderPayload>(OrderPlaced, (s, e) => …)`. Duplicate topic →
+  // TOPIC_DUPLICATE; a structurally malformed handler → MAPPER_INVALID.
+  on: <P = unknown>(event: EventDefinition, handler: ReadModelHandler<State, P>) => ReadModelDefinition<State>;
   // Fold a flat sequence of events (from any streams, in feed order) over a starting state
   // (defaults to `initial`), validating the result against the schema. Unmapped topics are
   // tolerated — the firehose carries every topic; a read model folds only the ones it cares

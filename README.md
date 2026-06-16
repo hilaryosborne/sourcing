@@ -8,13 +8,15 @@
 
 ```ts
 // an event is a topic + a typed payload (declared as its first version)
-const AccountOpened = event("account.opened.v1").version(object({ holder: string() }));
-const Deposited = event("account.deposited.v1").version(object({ amount: number().int().positive() }));
+const AccountOpened = event("account.opened.v1");
+AccountOpened.version(1, object({ holder: string() }));
+const Deposited = event("account.deposited.v1");
+Deposited.version(1, object({ amount: number().int().positive() }));
 
-// a projection folds events into a read model
+// a projection folds events into a read model (annotate the payload to type it)
 const Balance = projection("projection.balance.v1", object({ holder: string(), balance: number() }));
-Balance.handle(AccountOpened, (s, e) => ({ ...s, holder: e.payload.holder, balance: 0 }));
-Balance.handle(Deposited, (s, e) => ({ ...s, balance: s.balance + e.payload.amount }));
+Balance.handle<{ holder: string }>(AccountOpened, (s, e) => ({ ...s, holder: e.payload.holder, balance: 0 }));
+Balance.handle<{ amount: number }>(Deposited, (s, e) => ({ ...s, balance: s.balance + e.payload.amount }));
 
 Balance.build(account); // → { holder: "Ada", balance: 100 }
 ```
@@ -34,7 +36,7 @@ This library is the opposite bet. It is **mechanism, not judgment** — a delibe
 - **It has no opinion on storage.** The core has zero storage dependencies — it never reaches a database. Persistence is a separate package you add only when you want it, behind one interface with three reference adapters (Postgres, Mongo, S3) or your own.
 - **The only errors it raises are mechanical** — a payload that fails its schema, a malformed projection mapper, a topic collision, a lost optimistic-concurrency race. It will never say "insufficient funds." That sentence is yours to write.
 
-A few deliberate stances that distinguish it (each explained in the [FAQ](#faq)): **type-safe event versioning, no migration engine** — events evolve through an ordered chain of upcasters you declare, the compiler forces every mapper when a shape changes, and stored facts are lifted to the latest shape at read without being rewritten on disk; **right-to-forget is built in** via in-place stripping; and **the committed/staged split** is what lets you do business validation without the library ever knowing what validation is.
+A few deliberate stances that distinguish it (each explained in the [FAQ](#faq)): **event versioning without a migration engine** — events evolve through an ordered chain of upcasters you declare, and stored facts are lifted to the latest shape at read without being rewritten on disk; **right-to-forget is built in** via in-place stripping; and **the committed/staged split** is what lets you do business validation without the library ever knowing what validation is.
 
 > **When you should _not_ reach for this:** if you only ever need the latest state and will never ask "how did it get this way?", event sourcing is overhead you don't need — use a row in a table. See ["Do I actually need event sourcing?"](#do-i-actually-need-event-sourcing) before adopting.
 
@@ -81,8 +83,10 @@ import { event, aggregate, projection } from "@hilaryosborne/sourcing";
 import { object, string, number } from "zod";
 
 // 1 — Events: a topic + a Zod payload schema, declared as the event's first version.
-const AccountOpened = event("account.opened.v1").version(object({ holder: string().min(1) }));
-const Deposited = event("account.deposited.v1").version(object({ amount: number().int().positive() }));
+const AccountOpened = event("account.opened.v1");
+AccountOpened.version(1, object({ holder: string().min(1) }));
+const Deposited = event("account.deposited.v1");
+Deposited.version(1, object({ amount: number().int().positive() }));
 
 // 2 — An aggregate: a name + the events that are legal on its stream.
 const Account = aggregate("account.v1");
@@ -90,11 +94,18 @@ Account.register(AccountOpened);
 Account.register(Deposited);
 
 // 3 — A projection: a name, an output schema, and one handler per event.
-//     `e.payload` is fully typed from the event's schema — no casts.
+//     Annotate the payload type on handle() to type `e.payload`; it's runtime-validated either way.
 const Balance = projection("projection.balance.v1", object({ holder: string(), balance: number() }));
 Balance.aggregate(Account);
-Balance.handle(AccountOpened, (current, e) => ({ ...current, holder: e.payload.holder, balance: 0 }));
-Balance.handle(Deposited, (current, e) => ({ ...current, balance: current.balance + e.payload.amount }));
+Balance.handle<{ holder: string }>(AccountOpened, (current, e) => ({
+  ...current,
+  holder: e.payload.holder,
+  balance: 0,
+}));
+Balance.handle<{ amount: number }>(Deposited, (current, e) => ({
+  ...current,
+  balance: current.balance + e.payload.amount,
+}));
 
 // Build some facts and fold them. Nothing is stored — this is pure, in-memory.
 const account = Account.instance(); // core mints a nanoid id; pass your own to override
@@ -205,7 +216,11 @@ The adapter creates its tables and the `(stream, position)` unique index at cons
 Immutable history and "delete my data" sound like fire and water. The library reconciles them with **stripping**: each event declares named, contextual redactions next to itself (only the event understands its own payload), and erasure rewrites the affected events _in place_ with redacted payloads — same id, position, topic, and metadata, new payload. Nothing is mutated where it sits; a new redacted version replaces the old fact.
 
 ```ts
-AccountOpened.strip("gdpr", (payload) => ({ ...payload, holder: "[redacted]" }));
+// redactions are declared on the version they redact — the builder `.version()` returns
+AccountOpened.version(1, object({ holder: string() })).strip("gdpr", (payload) => ({
+  ...payload,
+  holder: "[redacted]",
+}));
 ```
 
 Pure-core, erasure is `strip → export`, and the pass/fail test is blunt — **no PII survives in the produced events**:
@@ -285,15 +300,19 @@ No, and no. Event sourcing is a _storage_ choice — how you persist state. CQRS
 Declare a new version on the event and an **upcaster** that lifts the previous shape into it:
 
 ```ts
-const AccountOpened = event("account.opened")
-  .version(object({ holder: string() }))
-  .version(object({ holder: object({ name: string() }), country: string() }))
-  .upcast((v1) => ({ holder: { name: v1.holder }, country: "unknown" }));
+const AccountOpened = event("account.opened");
+// version 1 — the original shape
+AccountOpened.version(1, object({ holder: string() }));
+// version 2 — a richer shape, plus the upcaster that lifts v1 into it
+AccountOpened.version(2, object({ holder: object({ name: string() }), country: string() })).upcast((prev) => {
+  const v1 = prev as { holder: string };
+  return { holder: { name: v1.holder }, country: "unknown" };
+});
 ```
 
-Stored events are **never rewritten**. Each one records the ordinal it was written at, and at read time the library walks it forward through your upcasters so projections and aggregates only ever see the **latest** shape. The safeguard is the type system: add a version whose shape differs and the upcaster won't compile until you write it — and every projection mapper that reads the changed shape fails to compile until you fix it. No silent drift.
+Each version is declared on the event with an explicit, contiguous number — that number _is_ the ordinal stored on every event. Stored events are **never rewritten**. At read time the library walks each one forward through your upcasters so projections and aggregates only ever see the **latest** shape. The version rules are enforced as mechanical errors: the first version can't declare an upcaster, every later version must, and the numbers must run `1, 2, 3, …` — break any of these and you get a thrown error, not silent drift. (The upcaster's input is `unknown`, since the library can't thread the previous shape's type through separate `.version()` statements — narrow it against the schema you're lifting from; its return is checked against the new version's schema.)
 
-This is deliberately _not_ the heavy upcaster machinery of most frameworks. There's no migration engine, no version field for the library to parse, nothing rewritten on disk, and it's opt-in per event — a single `.version()` is the common case, and you never think about upcasters until a shape actually changes. The library still understands nothing about what a version _means_; it just applies the ordered chain of pure functions you declared. Versioning stays mechanism, not judgment. (Strippers are per-version too — erasure redacts each event in its own version's shape.)
+This is deliberately _not_ the heavy upcaster machinery of most frameworks. There's no migration engine, nothing rewritten on disk, and it's opt-in per event — a single `.version(1, …)` is the common case, and you never think about upcasters until a shape actually changes. The library still understands nothing about what a version _means_; it just applies the ordered chain of pure functions you declared. Versioning stays mechanism, not judgment. (Strippers are per-version too — erasure redacts each event in its own version's shape.)
 
 ### How are concurrent writes handled?
 

@@ -8,9 +8,14 @@ import aggregate from "../aggregate/aggregate";
 import projection from "../projection/projection";
 
 // --- Domain: a bank account (deposits add, withdrawals subtract) ---
-export const AccountOpenedV1 = event("account.opened.v1").version(object({ holder: string().min(1) }));
-export const AccountDepositedV1 = event("account.deposited.v1").version(object({ amount: number().int().positive() }));
-export const AccountWithdrawnV1 = event("account.withdrawn.v1").version(object({ amount: number().int().positive() }));
+type Opened = { holder: string };
+type Amount = { amount: number };
+export const AccountOpenedV1 = event("account.opened.v1");
+AccountOpenedV1.version(1, object({ holder: string().min(1) }));
+export const AccountDepositedV1 = event("account.deposited.v1");
+AccountDepositedV1.version(1, object({ amount: number().int().positive() }));
+export const AccountWithdrawnV1 = event("account.withdrawn.v1");
+AccountWithdrawnV1.version(1, object({ amount: number().int().positive() }));
 
 export const Account = aggregate("account.v1");
 Account.register(AccountOpenedV1);
@@ -20,12 +25,12 @@ Account.register(AccountWithdrawnV1);
 export const BalanceV1 = object({ holder: string(), balance: number() });
 export const Balance = projection("projection.balance.v1", BalanceV1);
 Balance.aggregate(Account);
-Balance.handle(AccountOpenedV1, (current, event) => ({ ...current, holder: event.payload.holder, balance: 0 }));
-Balance.handle(AccountDepositedV1, (current, event) => ({
+Balance.handle<Opened>(AccountOpenedV1, (current, event) => ({ ...current, holder: event.payload.holder, balance: 0 }));
+Balance.handle<Amount>(AccountDepositedV1, (current, event) => ({
   ...current,
   balance: current.balance + event.payload.amount,
 }));
-Balance.handle(AccountWithdrawnV1, (current, event) => ({
+Balance.handle<Amount>(AccountWithdrawnV1, (current, event) => ({
   ...current,
   balance: current.balance - event.payload.amount,
 }));

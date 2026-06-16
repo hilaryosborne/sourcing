@@ -19,7 +19,7 @@ import { nanoid } from "nanoid";
 import { EventEnvelopeV1 } from "./event.schema";
 import type { AggregateRefV1Type, CreatorSchemaV1Type, EventEnvelopeV1Type } from "./event.schema";
 import type { VersionChain } from "./event";
-import { entryAt } from "./event";
+import { assertUpcastsPresent, entryAt } from "./event";
 import { EventErrors } from "./event.errors";
 
 // A standalone event instance. Built by EventDefinition.create(), decorated fluently,
@@ -96,11 +96,12 @@ interface EventData {
 
 // Lift a STORED payload to head by applying each later version's upcast in order. Pure;
 // returns the stored payload unchanged when it is already at head (the new-event case).
-// A malformed upcast is a mechanical fault (UPCAST_INVALID), validated at the boundary.
+// Ordinals are 1-based, so the walk runs from the next version up to the head number
+// (chain.length). A malformed upcast is a mechanical fault (UPCAST_INVALID), at the boundary.
 const toHead = (chain: VersionChain, version: number, stored: unknown): unknown => {
   let payload = stored;
-  for (let index = version + 1; index < chain.length; index++) {
-    const entry = entryAt(chain, index);
+  for (let next = version + 1; next <= chain.length; next++) {
+    const entry = entryAt(chain, next);
     try {
       payload = entry.schema.parse(entry.upcast!(payload));
     } catch (cause) {
@@ -108,6 +109,17 @@ const toHead = (chain: VersionChain, version: number, stored: unknown): unknown 
     }
   }
   return payload;
+};
+
+// Validate a head payload at the create() boundary, tagging the mechanical fault and
+// preserving the ZodError on cause. (restore() parses against the stored version's schema
+// raw; upcast/strip tag their own codes.)
+const parseOrThrow = (chain: VersionChain, payload: unknown): unknown => {
+  try {
+    return entryAt(chain, chain.length).schema.parse(payload);
+  } catch (cause) {
+    throw new Error(EventErrors.PAYLOAD_INVALID, { cause });
+  }
 };
 
 // The shared dsl assembly. Both fresh creation and envelope rehydration funnel here,
@@ -151,23 +163,32 @@ const make = (chain: VersionChain, data: EventData): EventInstance<unknown> => {
   return dsl;
 };
 
-// Fresh creation: an event is born at HEAD (the last version in the chain). Mint id +
-// created eagerly (captured as facts, never replayed); staging fields stay unset until an
-// aggregate assigns them. Behind EventDefinition.create() — payload is the head shape.
-export const eventInstance = <P>(topic: string, chain: VersionChain, payload: P): EventInstance<P> =>
-  make(chain, {
+// Fresh creation: an event is born at HEAD (the highest declared version number =
+// chain.length). The payload is validated against the head schema here (PAYLOAD_INVALID),
+// and the definition's later-version upcasts are asserted present at this first use. Mint id
+// + created eagerly (captured as facts, never replayed); staging fields stay unset until an
+// aggregate assigns them. Behind EventDefinition.create() — payload is `unknown` until validated.
+export const eventInstance = (topic: string, chain: VersionChain, payload: unknown): EventInstance<unknown> => {
+  assertUpcastsPresent(chain);
+  return make(chain, {
     id: nanoid(),
     topic,
-    payload,
-    version: chain.length - 1,
+    payload: parseOrThrow(chain, payload),
+    version: chain.length,
     created: new Date().toISOString(),
     headers: {},
-  }) as EventInstance<P>;
+  });
+};
 
 // Rehydration from a complete, already-persisted envelope — behind EventDefinition.restore().
 // Mints NO new id/created: it carries the stored identity/metadata/ordinal through. The
-// stored payload is validated against ITS version's schema (envelope.version, default 0).
-export const eventInstanceFromEnvelope = <P>(chain: VersionChain, envelope: EventEnvelopeV1Type): EventInstance<P> => {
+// definition's later-version upcasts are asserted present at this first use, and the stored
+// payload is validated against ITS version's schema (envelope.version, 1-based, default 1).
+export const eventInstanceFromEnvelope = (
+  chain: VersionChain,
+  envelope: EventEnvelopeV1Type,
+): EventInstance<unknown> => {
+  assertUpcastsPresent(chain);
   const parsed = EventEnvelopeV1.parse(envelope);
   return make(chain, {
     id: parsed.id,
@@ -179,5 +200,5 @@ export const eventInstanceFromEnvelope = <P>(chain: VersionChain, envelope: Even
     position: parsed.position,
     aggregate: parsed.aggregate,
     creator: parsed.creator,
-  }) as EventInstance<P>;
+  });
 };

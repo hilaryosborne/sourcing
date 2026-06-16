@@ -3,7 +3,11 @@
 Immutable history and "delete my data" sound like fire and water. The library reconciles them with **stripping**: each event declares named, contextual redactions next to itself (only the event understands its own payload), and erasure rewrites the affected events _in place_ with redacted payloads — same id, position, topic, and metadata, new payload. Nothing is mutated where it sits; a new redacted version replaces the old fact.
 
 ```ts
-AccountOpened.strip("gdpr", (payload) => ({ ...payload, holder: "[redacted]" }));
+// redactions are declared on the version they redact — the builder `.version()` returns
+AccountOpened.version(1, object({ holder: string() })).strip("gdpr", (payload) => ({
+  ...payload,
+  holder: "[redacted]",
+}));
 ```
 
 Pure-core, erasure is `strip → export`, and the pass/fail test is blunt — **no PII survives in the produced events**:

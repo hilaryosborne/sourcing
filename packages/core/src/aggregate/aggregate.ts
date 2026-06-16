@@ -71,7 +71,7 @@ export interface AggregateDefinition {
   instance: (id?: string) => AggregateInstance;
   // Register an event definition as legal on this aggregate. Chainable. Duplicate topic
   // on one definition → AggregateErrors.TOPIC_DUPLICATE.
-  register: <P>(definition: EventDefinition<P>) => AggregateDefinition;
+  register: (definition: EventDefinition) => AggregateDefinition;
 }
 
 // The instance's mutable working state: the committed/staged split, mutated in place as a

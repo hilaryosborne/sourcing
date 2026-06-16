@@ -40,6 +40,8 @@ Draft the amendment to FOUNDATION.md and the CLAUDE.md non-negotiable:
 
 Write as real `.ts` in `packages/core/src/event/`, stubbed (`throw new Error("not implemented — awaiting ratification")`). No implementation, no tests yet.
 
+> **⚠️ Superseded by the ref-exact DSL pass.** The type-state builder below was built and shipped, then reshaped on Hilary's ruling to the **ref-exact** form: the definition is captured in a `const` and `.version(n, schema)` is called on it per version (the return — a `VersionBuilder<Cur>` carrying `.upcast`/`.strip`, scoped to that version — is usually discarded). The three rules below now hold as **runtime-validated mechanical faults**, not compile-time guarantees (see FOUNDATION §"Versions & upcasters" and the resolved decisions 1 & 3). The original type-state design is kept here for the record.
+
 **The type-state builder** (proves the three compile-time rules structurally):
 - `event(topic)` → `EventStart` — only `.version()`.
 - `EventStart.version(schema)` → `Complete<O1>` — the **first** version routes straight to `Complete`, which has **no `.upcast`** (first version structurally cannot upcast).
@@ -54,9 +56,9 @@ Write as real `.ts` in `packages/core/src/event/`, stubbed (`throw new Error("no
 **The strip seam** — per-version stripper applied to the as-stored payload, output re-validated against that version's schema.
 
 **Open decisions to rule on at this gate** (do not pick silently):
-1. **Single-version ergonomics / migration of existing events.** Today's events use the pre-version `event()` API; this is a breaking core change. Is the first `.version()` the canonical single-version form (all existing events migrate to `.version(schema)`), or is there a shorthand? How do the existing core/persistence tests and the worked examples migrate?
-2. **Topic identity.** Does a projection subscribe to the base `account.opened` (versions hidden beneath), or do `.v1/.v2` remain real topics the chain bridges? (The ref implies the former.)
-3. **Ordinal representation** — integer index vs a recorded version label; what persistence stores and how the adapters carry it (touches Epic 4's stored shape and the conformance suite).
+1. **Single-version ergonomics / migration of existing events.** ✅ *Resolved (ref-exact pass).* The canonical form is a captured `const` + `.version(1, schema)`; all existing events, tests, and worked examples migrated to it. `create`/`restore` live on the definition handle (not the version builder); the head payload is `unknown`, validated at runtime against the head schema (lean-on-Zod).
+2. **Topic identity.** Does a projection subscribe to the base `account.opened` (versions hidden beneath), or do `.v1/.v2` remain real topics the chain bridges? (The ref implies the former.) *(Still as built; the `.v1` topic suffix is a pre-versioning naming holdover, orthogonal to this pass.)*
+3. **Ordinal representation** — ✅ *Resolved (ref-exact pass): the declared `.version(n, …)` number IS the persisted ordinal — 1-based and contiguous-from-1 (gap/duplicate/wrong-start → `VERSION_SEQUENCE`).* The envelope `version` field is `int().min(1).default(1)`; adapters carry it verbatim; the conformance fixture writes `version: 1`.
 4. **Strip-then-upcast at head** — confirm a stripped, then upcasted, event is required to be valid at head, and what happens if a later upcast would reintroduce a field strip removed.
 
 ⛔ **HALT.** Surface the drafts. Await **per-artefact** ratification.
@@ -75,12 +77,13 @@ Write as real `.ts` in `packages/core/src/event/`, stubbed (`throw new Error("no
 
 ## Phase C — Prove (create / test / prove)
 
-**Type-level tests (new in kind — the safeguard is a compile-time guarantee).** Using the existing `@ts-expect-error` discipline:
-- `@ts-expect-error` — `.upcast` after the **first** version is rejected.
-- A second `.version()` with **no** `.upcast` cannot reach the terminal (definition unusable).
-- `upcast`'s input type **is** the previous version's output; a wrong-shaped param fails to compile.
-- `upcast` must **return** the current version's shape; an incomplete object fails to compile.
-- `strip`'s input/output are the version's own shape.
+**Runtime-invariant tests (ref-exact pass — the safeguards are runtime, not compile-time).** The original type-level `@ts-expect-error` tests below were replaced, since the three rules are now mechanical faults thrown at runtime (`packages/core/src/event/__tests__/event.versioning.test.ts` → describe "runtime invariants"):
+- `.upcast` on the **first** version throws `UPCAST_ON_FIRST_VERSION` at the call site.
+- A later version left without an `.upcast` throws `UPCAST_MISSING` at first use (create/restore/consume/strip).
+- A `.version(n, …)` that breaks the contiguous-from-1 sequence (wrong start / gap / duplicate) throws `VERSION_SEQUENCE`.
+- Still type-checked: `upcast`'s **return** and `strip`'s input/output remain typed to the version's own schema (`upcast`'s **input** is now `unknown`, narrowed by the consumer).
+
+*Original type-level intent, for the record (superseded — the type-state builder it relied on was reshaped):* `@ts-expect-error` that `.upcast` after the first version is rejected; a second `.version()` with no `.upcast` cannot reach the terminal; `upcast`'s input is the previous output; `upcast` must return the current shape; `strip`'s input/output are the version's own shape.
 
 **Runtime unit tests:**
 - Upcast chain composes `v1 → v2 → v3`; a v1-stored event read at head equals the expected head shape.
